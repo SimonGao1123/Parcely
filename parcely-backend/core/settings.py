@@ -21,7 +21,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
 SECRET_KEY = os.environ['SECRET_KEY']
-
+CLERK_JWKS_URL = os.environ['CLERK_JWKS_URL']
+CLERK_ISSUER = os.environ['CLERK_ISSUER']
+CLERK_SECRET_KEY = os.environ['CLERK_SECRET_KEY']
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
@@ -52,6 +54,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+
+    'accounts.middleware.ClerkAuthMiddleware', # populates request.user with user matched from clerk auth
 ]
 
 ROOT_URLCONF = 'core.urls'

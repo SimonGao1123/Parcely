@@ -9,6 +9,7 @@ class AppUser(TimestampedModel):
     username = models.CharField(max_length=255, unique=True, db_index=True)
     first_name = models.CharField(max_length=255)
     last_name = models.CharField(max_length=255)
+    profile_picture = models.URLField(blank=True, null=True)
 
     class Meta:
         verbose_name = 'User'
