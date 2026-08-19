@@ -24,6 +24,7 @@ SECRET_KEY = os.environ['SECRET_KEY']
 CLERK_JWKS_URL = os.environ['CLERK_JWKS_URL']
 CLERK_ISSUER = os.environ['CLERK_ISSUER']
 CLERK_SECRET_KEY = os.environ['CLERK_SECRET_KEY']
+CLERK_WEBHOOK_SECRET = os.environ['CLERK_WEBHOOK_SECRET']
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
@@ -31,7 +32,7 @@ CLERK_SECRET_KEY = os.environ['CLERK_SECRET_KEY']
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.ngrok-free.dev', '.ngrok-free.app']
 
 
 # Application definition
@@ -43,10 +44,27 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    'rest_framework',
     'accounts',
+    'common'
 ]
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'accounts.authentication.ClerkMiddlewareAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'accounts.permissions.IsClerkAuthenticated',
+    ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ]
+}
+
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -57,6 +75,7 @@ MIDDLEWARE = [
 
     'accounts.middleware.ClerkAuthMiddleware', # populates request.user with user matched from clerk auth
 ]
+CORS_ALLOWED_ORIGINS = ['http://localhost:3000']
 
 ROOT_URLCONF = 'core.urls'
 

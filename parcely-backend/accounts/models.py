@@ -11,6 +11,9 @@ class AppUser(TimestampedModel):
     last_name = models.CharField(max_length=255)
     profile_picture = models.URLField(blank=True, null=True)
 
+    is_authenticated = True
+    is_anonymous = False
+
     class Meta:
         verbose_name = 'User'
         verbose_name_plural = 'Users'
