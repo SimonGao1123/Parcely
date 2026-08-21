@@ -21,5 +21,6 @@ from accounts import views as accounts_views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include(accounts_urls)),
+    path('s3/', include('s3.urls')),
     path('clerk/webhook/', accounts_views.clerk_webhook, name='clerk_webhook'),
 ]

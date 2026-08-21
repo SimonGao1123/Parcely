@@ -26,6 +26,12 @@ CLERK_ISSUER = os.environ['CLERK_ISSUER']
 CLERK_SECRET_KEY = os.environ['CLERK_SECRET_KEY']
 CLERK_WEBHOOK_SECRET = os.environ['CLERK_WEBHOOK_SECRET']
 
+AWS_S3_BUCKET = os.environ['AWS_S3_BUCKET']
+AWS_S3_REGION = os.environ['AWS_S3_REGION']
+
+AWS_ACCESS_KEY_ID = os.environ['AWS_ACCESS_KEY_ID']
+AWS_SECRET_ACCESS_KEY = os.environ['AWS_SECRET_ACCESS_KEY']
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
@@ -44,10 +50,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'storages',
 
     'rest_framework',
     'accounts',
-    'common'
+    'common',
+    's3'
 ]
 
 REST_FRAMEWORK = {
@@ -156,4 +164,24 @@ MAILERS = {
     'default': {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
+}
+
+STORAGES = {
+    'default': {
+          'BACKEND': 'storages.backends.s3.S3Storage',
+          'OPTIONS': {
+              'bucket_name':        AWS_S3_BUCKET,
+              'region_name':        AWS_S3_REGION,
+              'access_key':         AWS_ACCESS_KEY_ID,
+              'secret_key':         AWS_SECRET_ACCESS_KEY,
+              'default_acl':        None,
+              'querystring_auth':   True,
+              'querystring_expire': 3000,
+              'file_overwrite':     False,
+              'signature_version':  's3v4',
+          },
+      },
+      'staticfiles': {
+          'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+      },
 }
