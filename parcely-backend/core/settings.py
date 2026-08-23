@@ -55,7 +55,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'accounts',
     'common',
-    's3'
+    's3',
+    'store',
 ]
 
 REST_FRAMEWORK = {

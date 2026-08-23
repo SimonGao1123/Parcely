@@ -13,6 +13,8 @@ class Theme(models.TextChoices):
     CONTEMPORARY = "contemporary", "Contemporary"
     TIMELESS = "timeless", "Timeless"
 
+GRID_COLUMNS = 12
+
 # Create your models here.
 
 class StoreFront(TimestampedModel):
