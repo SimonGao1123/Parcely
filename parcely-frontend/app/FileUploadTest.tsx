@@ -33,6 +33,20 @@ export default function FileUploadTest() {
         <div>
             <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             <button onClick={handleFileUpload}>Upload</button>
+
+            <button onClick={
+                async () => {
+                    await api('/s3/delete/', {
+                        method: 'DELETE',
+                        body: JSON.stringify({
+                            blob_id: 4
+                        }),
+                    })
+                }
+            }
+            >
+                Delete
+            </button>
         </div>
     )
 }
