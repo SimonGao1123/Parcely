@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Annotated, Literal, Self, Optional
-from store.models import GRID_COLUMNS
+from store.constants import GRID_COLUMNS
+
 HexColor = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")] # ensures hex color is valid
 FONT_FAMILIES = Literal["Inter", "Roboto", "Playfair Display", "Roboto Mono"] # TODO: add more font families
 class StoreFrontStyle(BaseModel):
@@ -43,3 +44,36 @@ class PageBlockLayout(BaseModel):
     desktop: PageBlockLayoutPerDevice
     tablet: Optional[PageBlockLayoutPerDevice] = None
     mobile: Optional[PageBlockLayoutPerDevice] = None
+
+
+# PAGE BLOCK CONTENT SCHEMAS
+class MediaBlockContent(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    media_id: str
+
+class ProductBlockContent(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    product_id: str
+
+class GalleryBlockContent(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    gallery_ids: list[str]
+
+class SlideshowBlockContent(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    slideshow_ids: list[str]
+
+class TextBlockContent(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    text: str
+
+
+CONTENT_SCHEMAS: dict[str, type[BaseModel]] = {
+    "media": MediaBlockContent,
+    "product": ProductBlockContent,
+    "gallery": GalleryBlockContent,
+    "slideshow": SlideshowBlockContent,
+    "text": TextBlockContent,
+}
+
+
