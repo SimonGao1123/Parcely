@@ -42,3 +42,12 @@ class ProductSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+class ProductSummarySerializer(serializers.ModelSerializer): # for display in pageblocks
+    display_image = BlobSerializer(read_only=True)
+    plans = PlanSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Product
+        fields = ['id', 'name', 'description', 'is_subscription', 'max_capacity', 'display_image', 'plans', 'storefront', 'currency', 'is_active']
+        read_only_fields = ['id']

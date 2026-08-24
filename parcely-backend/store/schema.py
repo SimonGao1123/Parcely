@@ -49,19 +49,19 @@ class PageBlockLayout(BaseModel):
 # PAGE BLOCK CONTENT SCHEMAS
 class MediaBlockContent(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    media_id: str
+    media_id: int
 
 class ProductBlockContent(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    product_id: str
+    product_id: int
 
 class GalleryBlockContent(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    gallery_ids: list[str]
+    gallery_ids: list[int]
 
 class SlideshowBlockContent(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    slideshow_ids: list[str]
+    slideshow_ids: list[int]
 
 class TextBlockContent(BaseModel):
     model_config = ConfigDict(extra='forbid')

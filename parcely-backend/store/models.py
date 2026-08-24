@@ -31,7 +31,16 @@ class StoreFront(TimestampedModel):
 
     theme = models.CharField(max_length=255, choices=Theme.choices, default=Theme.MINIMALIST)
 
-    style = models.JSONField(default=dict, validators=[validate_style]) # only runs on full clean
+    style = models.JSONField(
+        default=lambda: {
+            "background_color": "#ffffff",
+            "font_family": "Inter",
+            "font_scale": 1.0,
+            "font_color": "#000000",
+            "line_spacing": 1.5,
+        },
+        validators=[validate_style],
+    ) # only runs on full clean
 
     banner_image = models.ForeignKey(Blob, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     logo_image = models.ForeignKey(Blob, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
@@ -95,7 +104,7 @@ class Page(TimestampedModel):
     class Meta:
         unique_together = ("slug", "storefront")
         indexes = [
-            models.Index(fields=["slug", "storefront"]),
+            models.Index(fields=["storefront", "slug"]),
         ]
 
 class PageBlock(TimestampedModel):
@@ -103,11 +112,11 @@ class PageBlock(TimestampedModel):
 
     kind = models.CharField(max_length=255, choices=BlockType.choices)
 
-    content = models.JSONField(default=dict)
+    content = models.JSONField() # required, kind-specific fields validated in save()
 
     style = models.JSONField(default=dict, validators=[validate_page_block_style])
 
-    layout = models.JSONField(default=dict, validators=[validate_page_block_layout])
+    layout = models.JSONField(validators=[validate_page_block_layout]) # required, must include desktop
 
     @transaction.atomic
     def save(self, *args, **kwargs):
