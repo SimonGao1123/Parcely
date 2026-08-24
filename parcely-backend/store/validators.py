@@ -6,23 +6,32 @@ from store.schema import (
 )
 from pydantic import ValidationError as PydanticValidationError
 from django.core.exceptions import ValidationError
+
+
+def _format_pydantic_errors(e: PydanticValidationError) -> list[str]:
+    return [
+        f"{'.'.join(str(p) for p in err['loc']) or '<root>'}: {err['msg']}"
+        for err in e.errors()
+    ]
+
+
 def validate_style(value: dict):
     try:
         StoreFrontStyle.model_validate(value)
     except PydanticValidationError as e:
-        raise ValidationError(e.errors())
+        raise ValidationError(_format_pydantic_errors(e))
 
 def validate_page_block_style(value: dict):
     try:
         PageBlockStyle.model_validate(value)
     except PydanticValidationError as e:
-        raise ValidationError(e.errors())
+        raise ValidationError(_format_pydantic_errors(e))
 
 def validate_page_block_layout(value: dict):
     try:
         PageBlockLayout.model_validate(value)
     except PydanticValidationError as e:
-        raise ValidationError(e.errors())
+        raise ValidationError(_format_pydantic_errors(e))
 
 # Not a JSONField validator — call from PageBlock.clean() where `kind` is known.
 def validate_page_block_content(value: dict, kind: str):
@@ -32,7 +41,7 @@ def validate_page_block_content(value: dict, kind: str):
     try:
         schema.model_validate(value)
     except PydanticValidationError as e:
-        raise ValidationError({"content": e.errors()})
+        raise ValidationError({"content": _format_pydantic_errors(e)})
 
 def rect_overlap(a, b):
     if a["col_start"] >= b["col_start"] + b["col_span"] or b["col_start"] >= a["col_start"] + a["col_span"]:

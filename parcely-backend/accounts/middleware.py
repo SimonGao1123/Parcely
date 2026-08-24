@@ -42,7 +42,7 @@ class ClerkAuthMiddleware:
             except requests.RequestException:
                 return JsonResponse({"error": "Clerk API unreachable"}, status=502)
 
-            if not all([clerk_user['email_address'], clerk_user['username'], clerk_user['first_name'], clerk_user['last_name']]):
+            if not all([clerk_user['primary_email_address_id'], clerk_user['username'], clerk_user['first_name'], clerk_user['last_name']]):
                 response = JsonResponse({"error": "Invalid clerk user details"}, status=400)
                 return response
             user = create_clerk_user(clerk_id, clerk_user) 

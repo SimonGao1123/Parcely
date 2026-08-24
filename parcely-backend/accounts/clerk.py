@@ -58,7 +58,6 @@ def fetch_clerk_user(clerk_id: str) -> dict:
     res.raise_for_status()
     user = res.json()
     
-    user["email_address"] = obtain_primary_email(user)
     return user
 
 def update_clerk_user(clerk_id: str, data: dict) -> AppUser | None:

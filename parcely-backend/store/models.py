@@ -6,6 +6,15 @@ from store.validators import validate_style, validate_page_block_style, validate
 from django.utils.text import slugify
 from django.core.exceptions import ValidationError
 
+def default_storefront_style():
+    return {
+        "background_color": "#ffffff",
+        "font_family": "Inter",
+        "font_scale": 1.0,
+        "font_color": "#000000",
+        "line_spacing": 1.5,
+    }
+
 class Theme(models.TextChoices):
     MINIMALIST = "minimalist", "Minimalist"
     PROFESSIONAL = "professional", "Professional"
@@ -32,13 +41,7 @@ class StoreFront(TimestampedModel):
     theme = models.CharField(max_length=255, choices=Theme.choices, default=Theme.MINIMALIST)
 
     style = models.JSONField(
-        default=lambda: {
-            "background_color": "#ffffff",
-            "font_family": "Inter",
-            "font_scale": 1.0,
-            "font_color": "#000000",
-            "line_spacing": 1.5,
-        },
+        default=default_storefront_style,
         validators=[validate_style],
     ) # only runs on full clean
 
