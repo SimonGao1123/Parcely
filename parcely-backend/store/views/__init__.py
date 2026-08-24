@@ -6,4 +6,9 @@ from store.views.storefront import (
     DeleteStoreFrontAPIView,
 )
 
-
+from store.views.page import (
+    PageDetailAPIView,
+    CreatePageAPIView,
+    UpdatePageAPIView,
+    DeletePageAPIView,
+)

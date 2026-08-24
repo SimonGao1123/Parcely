@@ -7,10 +7,15 @@ from accounts.serializers import AppUserSerializer
 
 class PageSummarySerializer(serializers.ModelSerializer):
     logo_image = BlobSerializer(read_only=True)
+    logo_image_id = serializers.PrimaryKeyRelatedField(
+        queryset=Blob.objects.all(), source="logo_image", write_only=True,
+        required=False, allow_null=True,
+    )
+    
     class Meta:
         model = Page
-        fields = ['id', 'title', 'slug', 'logo_image']
-        read_only_fields = ['id', 'slug']
+        fields = ['id', 'title', 'slug', 'logo_image', 'logo_image_id', 'storefront_id']
+        read_only_fields = ['id', 'slug', 'storefront_id'] # storefront must be read only, cannot update a page to a diff storefront
 
 class StoreFrontSummarySerializer(serializers.ModelSerializer):
     # just doesn't include all pages, only includes homepage summary
@@ -116,23 +121,21 @@ class PageBlockSerializer(serializers.ModelSerializer):
 
 class PageSerializer(serializers.ModelSerializer):
     logo_image = BlobSerializer(read_only=True)
-    storefront = StoreFrontSerializer(read_only=True)
+    storefront = StoreFrontSummarySerializer(read_only=True)
     blocks = PageBlockSerializer(many=True, read_only=True)
 
     logo_image_id = serializers.PrimaryKeyRelatedField(
         queryset=Blob.objects.all(), source="logo_image", write_only=True,
         required=False, allow_null=True,
     )
-    storefront_id = serializers.PrimaryKeyRelatedField(
-        queryset=StoreFront.objects.all(), source="storefront", write_only=True,
-    )
-
+    
+    # no storefront_id, we add from url path with slug (storefront_slug)
     class Meta:
         model = Page
         fields = [
             "id", "title", "slug",
             "logo_image", "storefront", "blocks",
-            "logo_image_id", "storefront_id",
+            "logo_image_id",
             "created_at", "updated_at",
         ]
         read_only_fields = ['id', 'slug', 'created_at', 'updated_at']
