@@ -5,7 +5,8 @@ from rest_framework.permissions import AllowAny
 
 from store.models import Page, PageBlock, StoreFront
 from store.serializers import PageSerializer, PageSummarySerializer
-
+from products.models import Product
+from s3.models import Blob
 # Forward FKs read by PageSerializer (which nests StoreFrontSummarySerializer,
 # which reads homepage.logo_image).
 SELECT_FIELDS = (
@@ -36,6 +37,49 @@ class PageDetailAPIView(generics.RetrieveAPIView):
             .prefetch_related(BLOCKS_PREFETCH)
             .filter(storefront__slug=self.kwargs['storefront_slug'])
         )
+    
+    # memoize get_object so DRF retrieve() and get_serializer_context()
+    # don't each fire a sep query
+    def get_object(self):
+        if not hasattr(self, '_object'):
+            self._object = super().get_object()
+        return self._object # store as self._object
+    
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+
+        page = self.get_object() # uses memoized and retrieved also uses memoized
+
+        product_ids: set[int] = set()
+        blob_ids: set[int] = set()
+
+        for block in page.blocks.all(): # already pre fetched
+            content = block.content or {}
+            kind = block.kind
+            if kind == 'product':
+                pid = content.get('product_id')
+                if pid:
+                    product_ids.add(pid)
+            elif kind == 'media':
+                mid = content.get('media_id')
+                if mid:
+                    blob_ids.add(mid)
+            elif kind == 'gallery':
+                blob_ids.update(content.get('gallery_ids', []))
+            elif kind == 'slideshow':
+                blob_ids.update(content.get('slideshow_ids', []))
+
+        # only query if something to fetch - avoids empty in() queries
+        ctx['products'] = (
+            {p.pk: p for p in Product.objects.filter(id__in=product_ids)}
+            if product_ids else {}
+        )
+        ctx['blobs'] = (
+            {b.pk: b for b in Blob.objects.filter(id__in=blob_ids)}
+            if blob_ids else {}
+        )
+        return ctx
+
 
 
 class CreatePageAPIView(generics.CreateAPIView):

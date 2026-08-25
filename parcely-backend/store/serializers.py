@@ -86,35 +86,29 @@ class PageBlockSerializer(serializers.ModelSerializer):
     resolved_content = serializers.SerializerMethodField()
 
     def get_resolved_content(self, obj):
-        # lazy imports to avoid store <-> products circular import
-        from products.models import Product
-        from products.serializers import ProductSummarySerializer
+        products = self.context.get('products', {})
+        blobs = self.context.get('blobs', {})
 
         kind = obj.kind
         content = obj.content or {}
 
-        if kind == 'product':
-            product_id = content.get('product_id')
-            if not product_id:
-                return None
-            product = Product.objects.filter(pk = product_id).first()
-            return ProductSummarySerializer(product, context=self.context).data if product else None
-        
-        if kind == 'media':
-            media = Blob.objects.filter(pk = content.get('media_id')).first()
-            return BlobSerializer(media, context=self.context).data if media else None
-        
-        if kind == 'gallery':
-            medias = Blob.objects.filter(pk__in = content.get('gallery_ids', [])).all()
-            return BlobSerializer(medias, many=True, context=self.context).data if medias else None
-        
-        if kind == 'slideshow':
-            slideshows = Blob.objects.filter(pk__in = content.get('slideshow_ids', [])).all()
-            return BlobSerializer(slideshows, many=True, context=self.context).data if slideshows else None
-        
         if kind == 'text':
             return content
-        
+        if kind == 'product':
+            product = products.get(content.get('product_id'))
+            if not product:
+                return None
+            from products.serializers import ProductSummarySerializer # lazy import to avoid circular import
+            return ProductSummarySerializer(product, context=self.context).data
+        if kind == 'media':
+            media = blobs.get(content.get('media_id'))
+            return BlobSerializer(media, context=self.context).data if media else None
+        if kind == 'gallery':
+            items = [blobs[i] for i in content.get('gallery_ids', []) if i in blobs]
+            return BlobSerializer(items, many=True, context=self.context).data
+        if kind == 'slideshow':
+            items = [blobs[i] for i in content.get('slideshow_ids', []) if i in blobs]
+            return BlobSerializer(items, many=True, context=self.context).data
         return None
             
     class Meta:

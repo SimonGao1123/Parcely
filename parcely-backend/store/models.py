@@ -50,6 +50,9 @@ class StoreFront(TimestampedModel):
 
     homepage = models.ForeignKey("Page", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
 
+    def __init__(self, *args, **kwargs): # keep track of previous state so only run validation for homepage
+        super().__init__(*args, **kwargs)
+        self._original_title = self.title
     def __str__(self):
         return self.title
     
@@ -68,11 +71,17 @@ class StoreFront(TimestampedModel):
             raise ValidationError("Logo image must be an image")
     
     def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = self._generate_slug() # currently slug is generated on creation, not changed on update
+        is_new = self._state.adding
+        title_changed = self.title != self._original_title
+        if is_new or title_changed:
+            self.slug = self._generate_slug()
         self.full_clean()
-        return super().save(*args, **kwargs)
-    
+        result = super().save(*args, **kwargs)
+        # refresh baseline only after a successful save; a failing full_clean
+        # or DB error must not leave the baseline out of sync with the DB.
+        self._original_title = self.title
+        return result
+
     def _generate_slug(self):
         base = slugify(self.title)[:250] or "storefront" # slugify takes title e.g. "My Store" and returns "my-store"
         slug = base
@@ -90,6 +99,9 @@ class Page(TimestampedModel):
     title = models.CharField(max_length=255)
     logo_image = models.ForeignKey(Blob, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
 
+    def __init__(self, *args, **kwargs): # keep track of previous state so only run validation for page content
+        super().__init__(*args, **kwargs)
+        self._original_title = self.title
     def __str__(self):
         return self.title
     def clean(self):
@@ -102,12 +114,17 @@ class Page(TimestampedModel):
             raise ValidationError("Logo image must be an image")
     
     def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = self._generate_slug() # currently slug is generated on creation, not changed on update
-        
+        is_new = self._state.adding
+        title_changed = self.title != self._original_title
+        if is_new or title_changed:
+            self.slug = self._generate_slug()
         self.full_clean()
-        return super().save(*args, **kwargs)
-    
+        result = super().save(*args, **kwargs)
+        # refresh baseline only after a successful save; a failing full_clean
+        # or DB error must not leave the baseline out of sync with the DB.
+        self._original_title = self.title
+        return result
+
     def _generate_slug(self):
         base = slugify(self.title)[:250] or "page"
         slug = base
@@ -134,9 +151,24 @@ class PageBlock(TimestampedModel):
 
     layout = models.JSONField(validators=[validate_page_block_layout]) # required, must include desktop
 
+    def __init__(self, *args, **kwargs): # keep track of previous state so only run validation for page block content
+        # if content ACTUALLY changes, then need to validate new ids passed in are valid / authed correctly
+        super().__init__(*args, **kwargs)
+        self._original_content = self.content
+        self._original_kind = self.kind
     @transaction.atomic
     def save(self, *args, **kwargs):
-        validate_page_block_content(self.content, self.kind, self.page.storefront)
+        is_new = self._state.adding
+        content_changed = (
+            self.content != self._original_content or
+            self.kind != self._original_kind
+        )
+        if is_new or content_changed:
+            validate_page_block_content(self.content, self.kind, self.page.storefront)
         self.full_clean()
         super().save(*args, **kwargs)
         validate_page_layout(self.page.blocks.all()) # includes self post-save; rolls back on overlap
+        # refresh baselines only after the full save + post-save validation succeed;
+        # the atomic block rolls back the DB on failure, so the baseline must too.
+        self._original_content = self.content
+        self._original_kind = self.kind

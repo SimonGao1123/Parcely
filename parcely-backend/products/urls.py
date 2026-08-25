@@ -7,6 +7,8 @@ from products.views import (
     PlanUpdateAPIView,
     PlanDeleteAPIView,
 )
+
+# sub path urls from storefronts/<str:storefront_slug>/products/
 urlpatterns = [
     path('', ProductListCreateAPIView.as_view(), name='product-list-create'),
     path('<int:id>/update/', ProductUpdateAPIView.as_view(), name='product-update'),
