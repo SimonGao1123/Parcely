@@ -4,10 +4,12 @@ from store.schema import (
     PageBlockLayout,
     CONTENT_SCHEMAS,
 )
-from products.models import Product
-from s3.models import Blob
 from pydantic import ValidationError as PydanticValidationError
 from django.core.exceptions import ValidationError
+
+# Product / Blob are imported lazily inside validate_page_block_content:
+# products.models imports store.models.StoreFront, so a top-level import here
+# creates a store <-> products circular import at Django startup.
 
 
 def _format_pydantic_errors(e: PydanticValidationError) -> list[str]:
@@ -37,6 +39,11 @@ def validate_page_block_layout(value: dict):
 
 # Not a JSONField validator — call from PageBlock.clean() where `kind` is known.
 def validate_page_block_content(value: dict, kind: str, storefront):
+    # Lazy imports: products.models depends on store.models, and this module
+    # is imported by store.models. Top-level imports would create a cycle.
+    from products.models import Product
+    from s3.models import Blob
+
     schema = CONTENT_SCHEMAS.get(kind)
     if schema is None:
         raise ValidationError({"kind": f"Unknown block kind: {kind}"})
