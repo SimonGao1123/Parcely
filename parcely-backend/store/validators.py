@@ -37,6 +37,23 @@ def validate_page_block_layout(value: dict):
     except PydanticValidationError as e:
         raise ValidationError(_format_pydantic_errors(e))
 
+
+# The validate_* functions above only raise; pydantic never mutates its input, so
+# omitted optional keys stay omitted in the stored JSON. These return the parsed
+# model dumped back to a dict, so absent optional keys persist as explicit nulls.
+# Call from save() and assign the result.
+def normalize_page_block_style(value: dict) -> dict:
+    try:
+        return PageBlockStyle.model_validate(value or {}).model_dump()
+    except PydanticValidationError as e:
+        raise ValidationError({"style": _format_pydantic_errors(e)})
+
+def normalize_page_block_layout(value: dict) -> dict:
+    try:
+        return PageBlockLayout.model_validate(value).model_dump()
+    except PydanticValidationError as e:
+        raise ValidationError({"layout": _format_pydantic_errors(e)})
+
 # Not a JSONField validator — call from PageBlock.clean() where `kind` is known.
 def validate_page_block_content(value: dict, kind: str, storefront):
     # Lazy imports: products.models depends on store.models, and this module

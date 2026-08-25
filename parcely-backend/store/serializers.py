@@ -103,12 +103,18 @@ class PageBlockSerializer(serializers.ModelSerializer):
         if kind == 'media':
             media = blobs.get(content.get('media_id'))
             return BlobSerializer(media, context=self.context).data if media else None
+        # unresolvable entries stay in place as their raw id, so positions line up
+        # with content[*_ids] and the client can see which ones are gone
         if kind == 'gallery':
-            items = [blobs[i] for i in content.get('gallery_ids', []) if i in blobs]
-            return BlobSerializer(items, many=True, context=self.context).data
+            return [
+                BlobSerializer(blobs[i], context=self.context).data if i in blobs else i
+                for i in content.get('gallery_ids', [])
+            ]
         if kind == 'slideshow':
-            items = [blobs[i] for i in content.get('slideshow_ids', []) if i in blobs]
-            return BlobSerializer(items, many=True, context=self.context).data
+            return [
+                BlobSerializer(blobs[i], context=self.context).data if i in blobs else i
+                for i in content.get('slideshow_ids', [])
+            ]
         return None
             
     class Meta:

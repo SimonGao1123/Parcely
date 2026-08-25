@@ -1,8 +1,10 @@
+import copy
+
 from django.db import models, transaction
 from s3.models import Blob
 from accounts.models import AppUser
 from common.models import TimestampedModel
-from store.validators import validate_style, validate_page_block_style, validate_page_block_layout, validate_page_block_content, validate_page_layout
+from store.validators import validate_style, validate_page_block_style, validate_page_block_layout, validate_page_block_content, validate_page_layout, normalize_page_block_style, normalize_page_block_layout
 from django.utils.text import slugify
 from django.core.exceptions import ValidationError
 
@@ -13,6 +15,16 @@ def default_storefront_style():
         "font_scale": 1.0,
         "font_color": "#000000",
         "line_spacing": 1.5,
+    }
+def default_page_block_style():
+    return {
+        "background_color": None,
+        "font_family": None,
+        "font_scale": None,
+        "font_color": None,
+        "line_spacing": None,
+        "alignment": "left",
+        "padding": None,
     }
 
 class Theme(models.TextChoices):
@@ -147,14 +159,17 @@ class PageBlock(TimestampedModel):
 
     content = models.JSONField() # required, kind-specific fields validated in save()
 
-    style = models.JSONField(default=dict, validators=[validate_page_block_style])
+    style = models.JSONField(default=default_page_block_style, validators=[validate_page_block_style])
 
     layout = models.JSONField(validators=[validate_page_block_layout]) # required, must include desktop
 
     def __init__(self, *args, **kwargs): # keep track of previous state so only run validation for page block content
         # if content ACTUALLY changes, then need to validate new ids passed in are valid / authed correctly
         super().__init__(*args, **kwargs)
-        self._original_content = self.content
+        # deepcopy: a plain assignment aliases the same dict, so an in-place
+        # mutation (content['product_id'] = x) would update the baseline too and
+        # silently skip reference validation on save.
+        self._original_content = copy.deepcopy(self.content)
         self._original_kind = self.kind
     @transaction.atomic
     def save(self, *args, **kwargs):
@@ -165,10 +180,13 @@ class PageBlock(TimestampedModel):
         )
         if is_new or content_changed:
             validate_page_block_content(self.content, self.kind, self.page.storefront)
+        # fill omitted optional keys with explicit nulls before persisting
+        self.style = normalize_page_block_style(self.style)
+        self.layout = normalize_page_block_layout(self.layout)
         self.full_clean()
         super().save(*args, **kwargs)
         validate_page_layout(self.page.blocks.all()) # includes self post-save; rolls back on overlap
         # refresh baselines only after the full save + post-save validation succeed;
         # the atomic block rolls back the DB on failure, so the baseline must too.
-        self._original_content = self.content
+        self._original_content = copy.deepcopy(self.content)
         self._original_kind = self.kind

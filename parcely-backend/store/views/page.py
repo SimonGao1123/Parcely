@@ -69,13 +69,28 @@ class PageDetailAPIView(generics.RetrieveAPIView):
             elif kind == 'slideshow':
                 blob_ids.update(content.get('slideshow_ids', []))
 
-        # only query if something to fetch - avoids empty in() queries
+        # only query if something to fetch - avoids empty in() queries.
+        # scoped to the storefront so read-time enforcement matches the write-time
+        # rules in validate_page_block_content: a ref that was valid at write time
+        # but has since been moved/reassigned drops out and resolves to None,
+        # same as a deleted one. this endpoint is public, so it can't trust the
+        # ids in content on their own.
         ctx['products'] = (
-            {p.pk: p for p in Product.objects.filter(id__in=product_ids)}
+            {
+                p.pk: p
+                for p in Product.objects.filter(
+                    id__in=product_ids, storefront=page.storefront
+                )
+            }
             if product_ids else {}
         )
         ctx['blobs'] = (
-            {b.pk: b for b in Blob.objects.filter(id__in=blob_ids)}
+            {
+                b.pk: b
+                for b in Blob.objects.filter(
+                    id__in=blob_ids, uploader_id=page.storefront.owner_id
+                )
+            }
             if blob_ids else {}
         )
         return ctx
