@@ -37,6 +37,11 @@ class Product(TimestampedModel):
         super().clean()
         if not self.is_subscription and self.max_capacity is not None:
             raise ValidationError("Max capacity is only allowed for subscriptions")
+        
+        if self.display_image is not None and not self.display_image.mime.startswith('image/'):
+            raise ValidationError("Display image must be an image")
+        if self.display_image is not None and self.display_image.uploader != self.storefront.owner:
+            raise ValidationError("Display image must be uploaded by the storefront owner")
     
     def save(self, *args, **kwargs):
         self.full_clean()

@@ -57,6 +57,15 @@ class StoreFront(TimestampedModel):
         super().clean()
         if self.homepage and self.homepage.storefront_id != self.pk:
             raise ValidationError("Homepage must belong to this storefront")
+        
+        if self.banner_image is not None and self.banner_image.uploader != self.owner:
+            raise ValidationError("Banner image must be uploaded by the storefront owner")
+        if self.banner_image is not None and not self.banner_image.mime.startswith('image/'):
+            raise ValidationError("Banner image must be an image")
+        if self.logo_image is not None and self.logo_image.uploader != self.owner:
+            raise ValidationError("Logo image must be uploaded by the storefront owner")
+        if self.logo_image is not None and not self.logo_image.mime.startswith('image/'):
+            raise ValidationError("Logo image must be an image")
     
     def save(self, *args, **kwargs):
         if not self.slug:
@@ -79,7 +88,7 @@ class Page(TimestampedModel):
     slug = models.SlugField(max_length=255, db_index=True)
 
     title = models.CharField(max_length=255)
-    logo_image = models.ForeignKey(Blob, on_delete=models.SET_NULL, null=True, blank=True)
+    logo_image = models.ForeignKey(Blob, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
 
     def __str__(self):
         return self.title
@@ -87,6 +96,10 @@ class Page(TimestampedModel):
         super().clean()
         if self.pk: # skip on first create — no blocks exist yet
             validate_page_layout(self.blocks.all())
+        if self.logo_image is not None and self.logo_image.uploader != self.storefront.owner:
+            raise ValidationError("Logo image must be uploaded by the storefront owner")
+        if self.logo_image is not None and not self.logo_image.mime.startswith('image/'):
+            raise ValidationError("Logo image must be an image")
     
     def save(self, *args, **kwargs):
         if not self.slug:
@@ -123,7 +136,7 @@ class PageBlock(TimestampedModel):
 
     @transaction.atomic
     def save(self, *args, **kwargs):
-        validate_page_block_content(self.content, self.kind)
+        validate_page_block_content(self.content, self.kind, self.page.storefront)
         self.full_clean()
         super().save(*args, **kwargs)
         validate_page_layout(self.page.blocks.all()) # includes self post-save; rolls back on overlap

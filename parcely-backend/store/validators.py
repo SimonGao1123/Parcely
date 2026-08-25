@@ -4,6 +4,8 @@ from store.schema import (
     PageBlockLayout,
     CONTENT_SCHEMAS,
 )
+from products.models import Product
+from s3.models import Blob
 from pydantic import ValidationError as PydanticValidationError
 from django.core.exceptions import ValidationError
 
@@ -34,7 +36,7 @@ def validate_page_block_layout(value: dict):
         raise ValidationError(_format_pydantic_errors(e))
 
 # Not a JSONField validator — call from PageBlock.clean() where `kind` is known.
-def validate_page_block_content(value: dict, kind: str):
+def validate_page_block_content(value: dict, kind: str, storefront):
     schema = CONTENT_SCHEMAS.get(kind)
     if schema is None:
         raise ValidationError({"kind": f"Unknown block kind: {kind}"})
@@ -42,6 +44,35 @@ def validate_page_block_content(value: dict, kind: str):
         schema.model_validate(value)
     except PydanticValidationError as e:
         raise ValidationError({"content": _format_pydantic_errors(e)})
+
+    if kind == 'product':
+        product = Product.objects.filter(pk=value['product_id'], storefront=storefront).first()
+        if product is None:
+            raise ValidationError({"product_id": "Product not found"})
+    if kind == 'media':
+        media = Blob.objects.filter(pk=value['media_id'], uploader=storefront.owner).first()
+        if media is None:
+            raise ValidationError({"media_id": "Media not found"})
+    if kind == 'gallery':
+        requested = set(value['gallery_ids'])
+        found = set(
+            Blob.objects.filter(pk__in=requested, uploader=storefront.owner)
+            .values_list('pk', flat=True)
+        )
+        missing = requested - found
+        if missing:
+            raise ValidationError({"gallery_ids": f"Media not found: {sorted(missing)}"})
+    if kind == 'slideshow':
+        requested = set(value['slideshow_ids'])
+        found = set(
+            Blob.objects.filter(pk__in=requested, uploader=storefront.owner)
+            .values_list('pk', flat=True)
+        )
+        missing = requested - found
+        if missing:
+            raise ValidationError({"slideshow_ids": f"Media not found: {sorted(missing)}"})
+        
+
 
 def rect_overlap(a, b):
     if a["col_start"] >= b["col_start"] + b["col_span"] or b["col_start"] >= a["col_start"] + a["col_span"]:

@@ -41,6 +41,7 @@ class Blob(TimestampedModel):
     
     def clean(self):
         super().clean()
+        
         validate_metadata(self.metadata, self.mime)
     
     def save(self, *args, **kwargs):

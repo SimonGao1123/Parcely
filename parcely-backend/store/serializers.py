@@ -32,6 +32,10 @@ class StoreFrontSummarySerializer(serializers.ModelSerializer):
     )
     
     homepage = PageSummarySerializer(read_only=True) # so we can automatically navigate to homepage with the slug
+    homepage_id = serializers.PrimaryKeyRelatedField(
+        queryset=Page.objects.all(), source="homepage", write_only=True,
+        required=False, allow_null=True,
+    )
     
     class Meta:
         model = StoreFront
@@ -40,7 +44,7 @@ class StoreFrontSummarySerializer(serializers.ModelSerializer):
             "logo_image", "banner_image", "owner",
             "logo_image_id", "banner_image_id",
             "created_at", "updated_at",
-            "homepage"
+            "homepage", "homepage_id"
         ]
         read_only_fields = ['id', 'slug', 'created_at', 'updated_at']
 
@@ -62,6 +66,11 @@ class StoreFrontSerializer(serializers.ModelSerializer):
     
     homepage = PageSummarySerializer(read_only=True) # so we can automatically navigate to homepage with the slug
 
+    homepage_id = serializers.PrimaryKeyRelatedField(
+        queryset=Page.objects.all(), source="homepage", write_only=True,
+        required=False, allow_null=True,
+    )
+
     class Meta:
         model = StoreFront
         fields = [
@@ -69,7 +78,7 @@ class StoreFrontSerializer(serializers.ModelSerializer):
             "logo_image", "banner_image", "owner",
             "logo_image_id", "banner_image_id",
             "created_at", "updated_at",
-            "pages", "homepage"
+            "pages", "homepage", "homepage_id"
         ]
         read_only_fields = ['id', 'slug', 'created_at', 'updated_at']
 
@@ -107,17 +116,11 @@ class PageBlockSerializer(serializers.ModelSerializer):
             return content
         
         return None
-    
-    page_id = serializers.PrimaryKeyRelatedField(
-        queryset=Page.objects.all(), source="page", write_only=True,
-    )
-             
-
             
     class Meta:
         model = PageBlock
-        fields = ['id', 'kind', 'content', 'style', 'layout', 'page', 'created_at', 'updated_at', 'resolved_content', 'page_id']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        fields = ['id', 'kind', 'content', 'style', 'layout', 'page', 'created_at', 'updated_at', 'resolved_content']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'page']
 
 class PageSerializer(serializers.ModelSerializer):
     logo_image = BlobSerializer(read_only=True)

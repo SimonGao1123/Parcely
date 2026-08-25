@@ -9,16 +9,13 @@ class PlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = Plan
         fields = '__all__'
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'product'] # cant change product id, can only change other fields
 
 class ProductSerializer(serializers.ModelSerializer):
     display_image = BlobSerializer(read_only=True)
     storefront = StoreFrontSerializer(read_only=True)
     plans = PlanSerializer(many=True, read_only=True)
 
-    storefront_id = serializers.PrimaryKeyRelatedField(
-        queryset=StoreFront.objects.all(), source="storefront", write_only=True,
-    )
     display_image_id = serializers.PrimaryKeyRelatedField(
         queryset=Blob.objects.all(), source="display_image", write_only=True,
         required=False, allow_null=True,
@@ -37,7 +34,6 @@ class ProductSerializer(serializers.ModelSerializer):
             'plans',
             'currency',
             'is_active',
-            'storefront_id',
             'display_image_id',
             'created_at', 'updated_at'
         ]
@@ -46,8 +42,13 @@ class ProductSerializer(serializers.ModelSerializer):
 class ProductSummarySerializer(serializers.ModelSerializer): # for display in pageblocks
     display_image = BlobSerializer(read_only=True)
     plans = PlanSerializer(many=True, read_only=True)
+
+    display_image_id = serializers.PrimaryKeyRelatedField(
+        queryset=Blob.objects.all(), source="display_image", write_only=True,
+        required=False, allow_null=True,
+    )
     
     class Meta:
         model = Product
-        fields = ['id', 'name', 'description', 'is_subscription', 'max_capacity', 'display_image', 'plans', 'storefront', 'currency', 'is_active']
-        read_only_fields = ['id']
+        fields = ['id', 'name', 'description', 'is_subscription', 'max_capacity', 'display_image', 'plans', 'storefront', 'currency', 'is_active', 'created_at', 'updated_at', 'display_image_id']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'storefront']

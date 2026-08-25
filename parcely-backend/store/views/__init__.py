@@ -12,3 +12,9 @@ from store.views.page import (
     UpdatePageAPIView,
     DeletePageAPIView,
 )
+
+from store.views.pageblock import (
+    PageBlockCreateAPIView,
+    PageBlockUpdateAPIView,
+    PageBlockDeleteAPIView,
+)
