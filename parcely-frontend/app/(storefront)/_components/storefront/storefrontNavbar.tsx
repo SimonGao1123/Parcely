@@ -4,7 +4,7 @@
 import { useMemo } from "react";
 import type { Storefront } from "@/types/storefront";
 import { ThemedNavbar } from "./themed/registry";
-import { useNavbarVisibility } from "./useNavbarVisibility";
+import { useNavbarVisibility } from "@/components/useNavbarVisibility";
 import { styleVars } from "./styleVars";
 
 export default function StorefrontNavbar({ storefront }: { storefront: Storefront }) {

@@ -50,7 +50,10 @@ class AllStoreFrontAPIView(generics.ListAPIView):
     """
     serializer_class = StoreFrontSummarySerializer
     permission_classes = [AllowAny]
-    queryset = StoreFront.objects.select_related(*SUMMARY_SELECT_RELATED)
+    filterset_class = StoreFrontFilter
+    # explicit ordering: pagination over an unordered queryset can repeat or
+    # skip rows between pages. OrderingFilter overrides this when ?order= is set
+    queryset = StoreFront.objects.select_related(*SUMMARY_SELECT_RELATED).order_by("-created_at")
 
 
 class StoreFrontDetailAPIView(generics.RetrieveAPIView):

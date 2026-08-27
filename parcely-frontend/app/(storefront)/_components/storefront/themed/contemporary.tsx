@@ -6,7 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { PageSummary } from "@/types/page";
 import type { ThemedHeaderProps, ThemedNavbarProps } from "./types";
-import { AuthControl } from "../../../../../components/authControl";
+import { AuthControl } from "@/components/authControl";
 
 function NavLink({ page, slug }: { page: PageSummary; slug: string }) {
     return (

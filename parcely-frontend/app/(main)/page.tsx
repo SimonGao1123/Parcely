@@ -1,10 +1,16 @@
+import Homepage from "./_components/homepage";
 
-export default function Home() {
-  
+export default async function Home(props: PageProps<"/">) {
+  const { page, order, theme, title } = await props.searchParams;
+
   return (
-    <div>
-      <h1>Hello World</h1>
-
-    </div>
+    <Homepage
+      query={{
+        page: typeof page === "string" ? page : undefined,
+        order: typeof order === "string" ? order : undefined,
+        theme: typeof theme === "string" ? theme : undefined,
+        title: typeof title === "string" ? title : undefined,
+      }}
+    />
   );
 }

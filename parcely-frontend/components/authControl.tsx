@@ -11,6 +11,8 @@ export function AuthControl({ className }: { className?: string }) {
         <Show
             when="signed-in"
             fallback={
+                // modal keeps the visitor on the storefront instead of
+                // redirecting away to /sign-in
                 <SignInButton mode="modal">
                     <button type="button" className={`cursor-pointer ${className ?? ""}`}>
                         Sign in

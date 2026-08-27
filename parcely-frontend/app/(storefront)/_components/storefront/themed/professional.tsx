@@ -4,7 +4,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ThemedNavbarProps } from "./types";
-import { AuthControl } from "../../../../../components/authControl";
+import { AuthControl } from "@/components/authControl";
 
 export function ProfessionalNavbar({ storefront, pages }: ThemedNavbarProps) {
     const { title, logo_image, banner_image, slug } = storefront;

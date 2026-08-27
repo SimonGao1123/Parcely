@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ThemedHeaderProps, ThemedNavbarProps } from "./types";
-import { AuthControl } from "../../../../../components/authControl";
+import { AuthControl } from "@/components/authControl";
 
 export function MinimalistNavbar({ storefront, pages }: ThemedNavbarProps) {
     const { title, logo_image, slug } = storefront;
