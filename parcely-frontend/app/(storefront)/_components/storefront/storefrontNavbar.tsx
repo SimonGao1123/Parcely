@@ -1,0 +1,35 @@
+'use client';
+
+// theme dependent, only loaded on detailed storefront view, used in a storefront layout file
+import { useMemo } from "react";
+import type { Storefront } from "@/types/storefront";
+import { ThemedNavbar } from "./themed/registry";
+import { useNavbarVisibility } from "./useNavbarVisibility";
+import { styleVars } from "./styleVars";
+
+export default function StorefrontNavbar({ storefront }: { storefront: Storefront }) {
+    const visible = useNavbarVisibility();
+
+    // Page has no ordering column yet, so the homepage is pinned to the front
+    // and the rest keep the order the API returned.
+    const pages = useMemo(() => {
+        const homepageId = storefront.homepage?.id;
+        if (homepageId == null) return storefront.pages;
+        const homepage = storefront.pages.find((p) => p.id === homepageId);
+        if (!homepage) return storefront.pages;
+        return [homepage, ...storefront.pages.filter((p) => p.id !== homepageId)];
+    }, [storefront.pages, storefront.homepage]);
+
+    return (
+        <div
+            style={styleVars(storefront.style)}
+            // no `inert` while hidden — it would block focus-within, leaving the
+            // nav permanently unreachable by keyboard after any scroll down
+            className={`fixed inset-x-0 top-0 z-50 transition-transform duration-300 focus-within:translate-y-0 ${
+                visible ? "translate-y-0" : "-translate-y-full"
+            }`}
+        >
+            <ThemedNavbar theme={storefront.theme} storefront={storefront} pages={pages} />
+        </div>
+    );
+}

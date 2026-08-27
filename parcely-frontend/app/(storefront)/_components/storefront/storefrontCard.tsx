@@ -11,7 +11,7 @@ export default function StorefrontCard({storefront}: {storefront: StorefrontSumm
     return (
         // TODO: point at the storefront route once it exists
         <Link
-            href=""
+            href={`/${storefront.slug}`}
             className="group relative block aspect-video w-full overflow-hidden rounded-xl bg-neutral-200"
         >
             {/* blob urls are presigned and expire, so they can't be optimized/cached */}

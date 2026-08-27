@@ -2,7 +2,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Annotated, Literal, Self, Optional
 from store.constants import GRID_COLUMNS
 
-HexColor = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")] # ensures hex color is valid
+# CSS Color 4 hex forms: #RGB, #RGBA, #RRGGBB, #RRGGBBAA. 5 and 7 digits are
+# not valid hex colors, so the lengths are enumerated rather than ranged.
+HexColor = Annotated[str, Field(pattern=r"^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")]
 FONT_FAMILIES = Literal["Inter", "Roboto", "Playfair Display", "Roboto Mono"] # TODO: add more font families
 class StoreFrontStyle(BaseModel):
     model_config = ConfigDict(extra='forbid')
