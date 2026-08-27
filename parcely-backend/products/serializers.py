@@ -11,6 +11,7 @@ class PlanSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['id', 'created_at', 'updated_at', 'product'] # cant change product id, can only change other fields
 
+# NOT NEEDED CURRENTLY, DEPRECATED
 class ProductSerializer(serializers.ModelSerializer):
     display_image = BlobSerializer(read_only=True)
     storefront = StoreFrontSerializer(read_only=True)

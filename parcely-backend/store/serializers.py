@@ -14,8 +14,8 @@ class PageSummarySerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Page
-        fields = ['id', 'title', 'slug', 'logo_image', 'logo_image_id', 'storefront_id']
-        read_only_fields = ['id', 'slug', 'storefront_id'] # storefront must be read only, cannot update a page to a diff storefront
+        fields = ['id', 'title', 'slug', 'logo_image', 'logo_image_id', 'storefront']
+        read_only_fields = ['id', 'slug', 'storefront'] # storefront must be read only, cannot update a page to a diff storefront
 
 class StoreFrontSummarySerializer(serializers.ModelSerializer):
     # just doesn't include all pages, only includes homepage summary

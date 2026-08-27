@@ -91,7 +91,7 @@ MIDDLEWARE = [
 
     'accounts.middleware.ClerkAuthMiddleware', # populates request.user with user matched from clerk auth
 ]
-CORS_ALLOWED_ORIGINS = ['http://localhost:3000']
+CORS_ALLOWED_ORIGINS = ['http://localhost:3000'] # EDIT IN PRODUCTION
 
 ROOT_URLCONF = 'core.urls'
 
