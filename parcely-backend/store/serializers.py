@@ -124,22 +124,27 @@ class PageBlockSerializer(serializers.ModelSerializer):
 
 class PageSerializer(serializers.ModelSerializer):
     logo_image = BlobSerializer(read_only=True)
-    storefront = StoreFrontSummarySerializer(read_only=True)
+    # storefront = StoreFrontSummarySerializer(read_only=True) unecessary currently
     blocks = PageBlockSerializer(many=True, read_only=True)
 
     logo_image_id = serializers.PrimaryKeyRelatedField(
         queryset=Blob.objects.all(), source="logo_image", write_only=True,
         required=False, allow_null=True,
     )
+
+    is_homepage = serializers.SerializerMethodField()
+
+    def get_is_homepage(self, obj):
+        return obj.storefront.homepage.id == obj.id if obj.storefront.homepage else False
     
     # no storefront_id, we add from url path with slug (storefront_slug)
     class Meta:
         model = Page
         fields = [
-            "id", "title", "slug",
-            "logo_image", "storefront", "blocks",
+            "id", "title", "slug", "is_homepage",
+            "logo_image", "blocks",
             "logo_image_id",
-            "created_at", "updated_at",
+            "created_at", "updated_at", "storefront"
         ]
-        read_only_fields = ['id', 'slug', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'slug', 'created_at', 'updated_at', 'storefront']
 

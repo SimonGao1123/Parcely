@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from "react";
+import Button from "@/components/button";
 
 type ImagePickerProps = {
     label: string;
@@ -48,18 +49,17 @@ export default function ImagePicker({ label, file, onChange, existingUrl }: Imag
                     className="text-sm text-stone-600 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-stone-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:text-stone-700 hover:file:border-stone-500"
                 />
                 {file && (
-                    <button
-                        type="button"
+                    <Button
+                        variant="link"
                         onClick={() => {
                             // the input keeps its own value; without this reset
                             // re-picking the same file fires no change event
                             if (inputRef.current) inputRef.current.value = "";
                             onChange(null);
                         }}
-                        className="cursor-pointer text-sm text-stone-500 underline hover:text-stone-800"
                     >
                         Clear
-                    </button>
+                    </Button>
                 )}
             </div>
         </div>

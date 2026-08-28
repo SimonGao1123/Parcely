@@ -40,9 +40,9 @@ export async function createStorefront(input: CreateStorefrontInput): Promise<{ 
         return { error: formatErrors(await response.json().catch(() => null)) };
     }
 
-    const { slug } = await response.json();
+    const { slug, homepage } = await response.json();
 
     // the homepage list is server-rendered from getStorefrontList
     revalidatePath("/");
-    redirect(`/${slug}`);
+    redirect(`/${slug}/${homepage.slug}`);
 }

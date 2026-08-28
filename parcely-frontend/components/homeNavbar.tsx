@@ -1,11 +1,13 @@
 'use client';
 
 import { AuthControl } from "./authControl";
+import Button from "./button";
 import { useNavbarVisibility } from "./useNavbarVisibility";
+import { usePathname, useRouter } from "next/navigation";
 
 export default function HomeNavbar() {
     const visible = useNavbarVisibility();
-
+    const router = useRouter();
     return (
         <div
             // no `inert` while hidden — it would block focus-within, leaving the
@@ -14,7 +16,10 @@ export default function HomeNavbar() {
                 visible ? "translate-y-0" : "-translate-y-full"
             }`}
         >
-            <nav className="flex items-center justify-end border-b border-stone-200 bg-stone-100 px-6 py-3 text-stone-700">
+            <nav className="flex items-center justify-between border-b border-stone-200 bg-stone-100 px-6 py-3 text-stone-700">
+                <Button onClick={() => router.push("/create_storefront")}>
+                    Create storefront
+                </Button>
                 <AuthControl className="text-sm transition-colors hover:text-stone-950" />
             </nav>
         </div>

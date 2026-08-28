@@ -36,7 +36,7 @@ export function ContemporaryNavbar({ storefront, pages }: ThemedNavbarProps) {
 
     return (
         // grid keeps the centre cell optically centred as link widths change
-        <nav className="grid grid-cols-3 items-center border-b border-current/15 px-6 py-3 font-[family-name:var(--sf-font)] text-[var(--sf-fg)]">
+        <nav className="grid grid-cols-3 items-center border-b border-current/15 bg-[var(--sf-bg)] px-6 py-3 font-[family-name:var(--sf-font)] text-[var(--sf-fg)]">
             <div className="flex items-center justify-start gap-6">
                 {pages.slice(0, mid).map((page) => (
                     <NavLink key={page.id} page={page} slug={slug} />
@@ -77,7 +77,7 @@ export function ContemporaryHeader({ storefront }: ThemedHeaderProps) {
     if (!banner_image && !description) return null;
 
     return (
-        <header className="relative aspect-3/1 w-full bg-[var(--sf-bg)] font-[family-name:var(--sf-font)] text-[var(--sf-fg)]">
+        <header className="relative aspect-5/1 w-full bg-[var(--sf-bg)] font-[family-name:var(--sf-font)] text-[var(--sf-fg)]">
             {banner_image && (
                 <Image
                     src={banner_image.url}

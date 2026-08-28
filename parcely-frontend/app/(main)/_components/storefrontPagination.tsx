@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Button from "@/components/button";
 
 type Props = {
     page: number;
@@ -24,22 +25,19 @@ export default function StorefrontPagination({ page, count, hasNext, hasPrevious
 
     if (!hasNext && !hasPrevious) return null;
 
-    const buttonClass =
-        "cursor-pointer rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-700 transition-colors hover:border-stone-500 disabled:cursor-default disabled:opacity-40 disabled:hover:border-stone-300";
-
     return (
         <div className="flex items-center justify-center gap-4">
-            <button type="button" onClick={() => go(page - 1)} disabled={!hasPrevious} className={buttonClass}>
+            <Button variant="outline" onClick={() => go(page - 1)} disabled={!hasPrevious}>
                 Previous
-            </button>
+            </Button>
 
             <span className="text-sm text-stone-600">
                 Page {page} · {count} storefront{count === 1 ? "" : "s"}
             </span>
 
-            <button type="button" onClick={() => go(page + 1)} disabled={!hasNext} className={buttonClass}>
+            <Button variant="outline" onClick={() => go(page + 1)} disabled={!hasNext}>
                 Next
-            </button>
+            </Button>
         </div>
     );
 }

@@ -10,7 +10,7 @@ export function TimelessNavbar({ storefront, pages }: ThemedNavbarProps) {
     const { title, logo_image, banner_image } = storefront;
 
     return (
-        <nav className="font-[family-name:var(--sf-font)] text-[var(--sf-fg)]">
+        <nav className="bg-[var(--sf-bg)] font-[family-name:var(--sf-font)] text-[var(--sf-fg)]">
             {/* fixed height + object-cover crops the banner rather than squashing it */}
             <div className="relative flex h-24 w-full items-center justify-center overflow-hidden bg-[var(--sf-bg)]">
                 {/* presigned urls expire, so they can't be optimized */}

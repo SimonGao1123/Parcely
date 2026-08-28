@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Theme } from "@/types/storefront";
+import Button from "@/components/button";
 
 const THEMES: Theme[] = [
     "minimalist",
@@ -55,19 +56,15 @@ export default function StorefrontFilters() {
                 {THEMES.map((theme) => {
                     const active = activeTheme === theme;
                     return (
-                        <button
+                        <Button
                             key={theme}
-                            type="button"
+                            variant="chip"
+                            active={active}
                             // clicking the active theme clears the filter
                             onClick={() => apply({ theme: active ? null : theme })}
-                            className={`cursor-pointer rounded-full border px-3 py-1 text-sm capitalize transition-colors ${
-                                active
-                                    ? "border-stone-800 bg-stone-800 text-stone-50"
-                                    : "border-stone-300 text-stone-700 hover:border-stone-500"
-                            }`}
                         >
                             {theme}
-                        </button>
+                        </Button>
                     );
                 })}
 

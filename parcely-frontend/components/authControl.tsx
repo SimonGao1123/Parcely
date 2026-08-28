@@ -1,6 +1,7 @@
 // No 'use client' — the Clerk components carry their own boundary.
 
 import { Show, SignInButton, UserButton } from "@clerk/nextjs";
+import Button from "./button";
 
 // Behaviour is shared across themes; appearance is not. Each themed navbar
 // passes the class list it uses for its own nav links so the signed-out state
@@ -14,9 +15,10 @@ export function AuthControl({ className }: { className?: string }) {
                 // modal keeps the visitor on the storefront instead of
                 // redirecting away to /sign-in
                 <SignInButton mode="modal">
-                    <button type="button" className={`cursor-pointer ${className ?? ""}`}>
+                    {/* unstyled: the themed navbar supplies the appearance via className */}
+                    <Button variant="unstyled" className={className}>
                         Sign in
-                    </button>
+                    </Button>
                 </SignInButton>
             }
         >

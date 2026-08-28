@@ -8,7 +8,7 @@ import { AuthControl } from "@/components/authControl";
 
 export function ArtistNavbar({ storefront, pages }: ThemedNavbarProps) {
     return (
-        <nav className="flex items-center gap-8 border-b border-current/15 px-6 py-3 font-[family-name:var(--sf-font)] text-[var(--sf-fg)]">
+        <nav className="flex items-center gap-8 border-b border-current/15 bg-[var(--sf-bg)] px-6 py-3 font-[family-name:var(--sf-font)] text-[var(--sf-fg)]">
             {pages.map((page) => (
                 <Link
                     key={page.id}
@@ -84,8 +84,8 @@ export function ArtistHeader({ storefront }: ThemedHeaderProps) {
                 />
             </div>
 
-            <div className="absolute inset-0 flex items-center justify-end px-10 text-right">
-                {identity("items-end")}
+            <div className="absolute inset-0 flex items-center justify-center px-10 text-center">
+                {identity("items-center")}
             </div>
         </header>
     );

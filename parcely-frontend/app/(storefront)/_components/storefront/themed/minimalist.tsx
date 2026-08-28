@@ -9,7 +9,7 @@ export function MinimalistNavbar({ storefront, pages }: ThemedNavbarProps) {
     const { title, logo_image, slug } = storefront;
 
     return (
-        <nav className="flex items-center justify-between border-b border-current/10 px-8 py-4 font-[family-name:var(--sf-font)] text-[var(--sf-fg)]">
+        <nav className="flex items-center justify-between border-b border-current/10 bg-[var(--sf-bg)] px-8 py-4 font-[family-name:var(--sf-font)] text-[var(--sf-fg)]">
             {/* presigned urls expire, so they can't be optimized */}
             {logo_image ? (
                 <Image
@@ -55,7 +55,7 @@ export function MinimalistHeader({ storefront }: ThemedHeaderProps) {
 
     return (
         <header className="flex w-full items-center gap-12 bg-[var(--sf-bg)] px-8 py-20 font-[family-name:var(--sf-font)] text-[var(--sf-fg)]">
-            <div className="flex flex-1 flex-col gap-4">
+            <div className="flex flex-1 flex-col items-center gap-2 text-center">
                 <h1 className="text-4xl tracking-tight">{title}</h1>
                 {description && (
                     <p className="max-w-md text-sm opacity-70">{description}</p>
@@ -64,7 +64,7 @@ export function MinimalistHeader({ storefront }: ThemedHeaderProps) {
 
             {/* contained block rather than a full-bleed background */}
             {banner_image && (
-                <div className="relative aspect-4/3 w-2/5 shrink-0">
+                <div className="relative aspect-3/2 w-1/3 shrink-0">
                     <Image
                         src={banner_image.url}
                         alt=""

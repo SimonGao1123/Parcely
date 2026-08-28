@@ -1,1 +1,38 @@
 @import "tailwindcss";
+
+/* Grid placement comes from the database, so it can't be expressed as Tailwind
+   classes, and inline styles can't carry media queries. Blocks set the --blk-*
+   vars inline; these rules turn them into grid properties at each breakpoint.
+   The + 1 converts the backend's 0-indexed columns to CSS grid's 1-indexed lines. */
+.page-block {
+    grid-column: calc(var(--blk-col-start) + 1) / span var(--blk-col-span);
+    grid-row: calc(var(--blk-row-start) + 1) / span var(--blk-row-span);
+
+    /* A fixed grid-auto-rows already stops the track from growing, but a grid
+       item's default min-width/min-height is auto — a content-based floor that
+       lets the item itself outgrow its track. Zeroing both closes the last route
+       by which content can dictate size; overflow then clips the remainder. */
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* A null tablet/mobile layout omits its vars entirely, so the fallback argument
+   resolves to the desktop value. Mobile falls back to desktop, not to tablet. */
+@media (max-width: 1023px) {
+    .page-block {
+        grid-column: calc(var(--blk-col-start-tablet, var(--blk-col-start)) + 1) /
+            span var(--blk-col-span-tablet, var(--blk-col-span));
+        grid-row: calc(var(--blk-row-start-tablet, var(--blk-row-start)) + 1) /
+            span var(--blk-row-span-tablet, var(--blk-row-span));
+    }
+}
+
+@media (max-width: 767px) {
+    .page-block {
+        grid-column: calc(var(--blk-col-start-mobile, var(--blk-col-start)) + 1) /
+            span var(--blk-col-span-mobile, var(--blk-col-span));
+        grid-row: calc(var(--blk-row-start-mobile, var(--blk-row-start)) + 1) /
+            span var(--blk-row-span-mobile, var(--blk-row-span));
+    }
+}

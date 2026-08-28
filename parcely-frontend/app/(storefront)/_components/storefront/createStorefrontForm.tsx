@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useUploadFile } from "@/lib/api/s3/uploadFile";
 import { createStorefront } from "@/lib/api/storefront/createStorefront";
 import type { StorefrontStyle, Theme } from "@/types/storefront";
+import Button from "@/components/button";
 import ImagePicker from "./form/imagePicker";
 import StyleSelector, { DEFAULT_STOREFRONT_STYLE } from "./form/styleSelector";
 import ThemeSelector from "./form/themeSelector";
@@ -117,13 +118,9 @@ export default function CreateStorefrontForm() {
                 </p>
             )}
 
-            <button
-                type="submit"
-                disabled={submitting}
-                className="cursor-pointer self-start rounded-lg bg-stone-800 px-4 py-2 text-sm text-stone-50 transition-colors hover:bg-stone-950 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-                {submitting ? "Creating…" : uploading ? "Uploading images..." : "Create storefront"}
-            </button>
+            <Button type="submit" disabled={submitting} className="self-start">
+                {uploading ? "Uploading images…" : submitting ? "Creating…" : "Create storefront"}
+            </Button>
         </form>
     );
 }

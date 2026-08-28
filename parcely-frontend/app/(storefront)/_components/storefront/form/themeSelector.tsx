@@ -1,6 +1,7 @@
 'use client';
 
 import type { Theme } from "@/types/storefront";
+import Button from "@/components/button";
 
 export const THEMES: Theme[] = [
     "minimalist",
@@ -23,21 +24,16 @@ export default function ThemeSelector({ value, onChange }: ThemeSelectorProps) {
                 {THEMES.map((theme) => {
                     const active = value === theme;
                     return (
-                        <button
+                        <Button
                             key={theme}
-                            type="button"
+                            variant="chip"
+                            active={active}
                             // unlike the homepage filter chips this never clears:
                             // a storefront always has a theme
                             onClick={() => onChange(theme)}
-                            aria-pressed={active}
-                            className={`cursor-pointer rounded-full border px-3 py-1 text-sm capitalize transition-colors ${
-                                active
-                                    ? "border-stone-800 bg-stone-800 text-stone-50"
-                                    : "border-stone-300 text-stone-700 hover:border-stone-500"
-                            }`}
                         >
                             {theme}
-                        </button>
+                        </Button>
                     );
                 })}
             </div>

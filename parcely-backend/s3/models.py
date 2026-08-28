@@ -20,7 +20,10 @@ def default_expires_at():
 
 
 class Blob(TimestampedModel):
-    key = models.FileField(upload_to=blob_upload_path)
+    # FileField defaults to max_length=100, but the key is
+    # uploads/<id>/<uuid4>/<filename> — ~47 chars of prefix plus a filename that
+    # may itself be 255. S3 allows 1024-byte keys, so 512 is the binding limit.
+    key = models.FileField(upload_to=blob_upload_path, max_length=512)
     confirmed = models.BooleanField(default=False)
     checksum = models.CharField(max_length=255)
     mime = models.CharField(max_length=255)
