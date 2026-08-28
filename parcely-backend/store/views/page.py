@@ -2,7 +2,8 @@ from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from rest_framework import generics
 from rest_framework.permissions import AllowAny
-
+from rest_framework.response import Response
+from rest_framework import status
 from store.models import Page, PageBlock, StoreFront
 from store.serializers import PageSerializer, PageSummarySerializer
 from products.models import Product
@@ -140,3 +141,9 @@ class DeletePageAPIView(generics.DestroyAPIView):
             storefront__slug=self.kwargs['storefront_slug'],
             storefront__owner=self.request.user,
         )
+    def destroy(self, request, *args, **kwargs):
+        page = self.get_object()
+        if page.storefront.homepage == page:
+            return Response(status=status.HTTP_400_BAD_REQUEST, data={"detail": "Cannot delete homepage"})
+        self.perform_destroy(page)
+        return Response(status=status.HTTP_204_NO_CONTENT)

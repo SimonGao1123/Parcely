@@ -6,5 +6,5 @@ export default async function CreateStorefrontLayout({ children }: { children: R
     if (!me) {
         redirect("/sign-in"); // must be signed in
     }
-    return <div className="container mx-auto px-4 py-8">{children}</div>;
+    return children;
 }

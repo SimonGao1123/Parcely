@@ -77,5 +77,3 @@ CONTENT_SCHEMAS: dict[str, type[BaseModel]] = {
     "slideshow": SlideshowBlockContent,
     "text": TextBlockContent,
 }
-
-

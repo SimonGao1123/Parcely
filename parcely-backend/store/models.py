@@ -7,7 +7,6 @@ from common.models import TimestampedModel
 from store.validators import validate_style, validate_page_block_style, validate_page_block_layout, validate_page_block_content, validate_page_layout, normalize_page_block_style, normalize_page_block_layout
 from django.utils.text import slugify
 from django.core.exceptions import ValidationError
-
 def default_storefront_style():
     return {
         "background_color": "#ffffff",
@@ -92,6 +91,16 @@ class StoreFront(TimestampedModel):
         # refresh baseline only after a successful save; a failing full_clean
         # or DB error must not leave the baseline out of sync with the DB.
         self._original_title = self.title
+
+        # automatically create homepage for storefront on initial creation.
+        # Page is defined below this class, but resolves fine here: this runs at
+        # call time, long after the module finishes importing.
+        if is_new:
+            page = Page.objects.create(storefront=self, title="Home")
+            # queryset update rather than self.save(): re-entering save() here
+            # would recurse, and full_clean() would re-validate a row already known good
+            StoreFront.objects.filter(pk=self.pk).update(homepage=page)
+            self.homepage = page
         return result
 
     def _generate_slug(self):

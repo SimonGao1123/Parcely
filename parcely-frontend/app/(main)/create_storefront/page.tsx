@@ -1,4 +1,4 @@
-import CreateStorefrontForm from "../_components/storefront/createStorefrontForm";
+import CreateStorefrontForm from "../../(storefront)/_components/storefront/createStorefrontForm";
 
 export default function CreateStorefrontPage() {
     return (
