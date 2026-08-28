@@ -5,6 +5,7 @@ from django.db.models import Prefetch
 from store.models import StoreFront, Page
 from store.serializers import StoreFrontSummarySerializer, StoreFrontSerializer
 from store.filters import StoreFrontFilter
+from store.access import visible_storefront_q
 
 
 # Forward FKs on StoreFront — one JOIN each, use select_related.
@@ -53,7 +54,7 @@ class AllStoreFrontAPIView(generics.ListAPIView):
     filterset_class = StoreFrontFilter
     # explicit ordering: pagination over an unordered queryset can repeat or
     # skip rows between pages. OrderingFilter overrides this when ?order= is set
-    queryset = StoreFront.objects.select_related(*SUMMARY_SELECT_RELATED).order_by("-created_at")
+    queryset = StoreFront.objects.select_related(*SUMMARY_SELECT_RELATED).order_by("-created_at").filter(is_draft=False) # must be published storefronts
 
 
 class StoreFrontDetailAPIView(generics.RetrieveAPIView):
@@ -63,11 +64,19 @@ class StoreFrontDetailAPIView(generics.RetrieveAPIView):
     serializer_class = StoreFrontSerializer
     permission_classes = [AllowAny]
     lookup_field = "slug"
-    queryset = (
-        StoreFront.objects
-        .select_related(*SUMMARY_SELECT_RELATED)
-        .prefetch_related(PAGES_PREFETCH)
-    )
+
+    # get_queryset rather than a class-level queryset: the draft filter depends
+    # on request.user. Filtering here rather than rejecting after fetch means no
+    # code path can serialize a draft, and a hidden storefront 404s exactly like
+    # a bad slug — so an unpublished title never leaks.
+    def get_queryset(self):
+        return (
+            StoreFront.objects
+            .select_related(*SUMMARY_SELECT_RELATED)
+            .prefetch_related(PAGES_PREFETCH)
+            .filter(visible_storefront_q(self.request.user))
+        )
+
 
 
 class UpdateStoreFrontAPIView(generics.UpdateAPIView):

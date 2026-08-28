@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from store.models import Page, PageBlock, StoreFront
 from store.serializers import PageSerializer, PageSummarySerializer
+from store.access import visible_storefront_q
 from products.models import Product
 from s3.models import Blob
 # Forward FKs read by PageSerializer (which nests StoreFrontSummarySerializer,
@@ -37,6 +38,10 @@ class PageDetailAPIView(generics.RetrieveAPIView):
             .select_related(*SELECT_FIELDS)
             .prefetch_related(BLOCKS_PREFETCH)
             .filter(storefront__slug=self.kwargs['storefront_slug'])
+            # pages of a draft storefront 404 for everyone but its owner. this is
+            # also what keeps products private: get_serializer_context resolves
+            # them into resolved_content, and that's their only public route out.
+            .filter(visible_storefront_q(self.request.user, 'storefront__'))
         )
     
     # memoize get_object so DRF retrieve() and get_serializer_context()

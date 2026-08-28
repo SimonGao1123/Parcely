@@ -17,9 +17,16 @@ export default function HomeNavbar() {
             }`}
         >
             <nav className="flex items-center justify-between border-b border-stone-200 bg-stone-100 px-6 py-3 text-stone-700">
-                <Button onClick={() => router.push("/create_storefront")}>
-                    Create storefront
-                </Button>
+                <div className="flex items-center gap-3">
+                    <Button onClick={() => router.push("/create_storefront")}>
+                        Create storefront
+                    </Button>
+                    {/* /personal redirects to sign-in when signed out, same as
+                        /create_storefront — so neither needs a signed-in guard here */}
+                    <Button variant="outline" onClick={() => router.push("/personal")}>
+                        My storefronts
+                    </Button>
+                </div>
                 <AuthControl className="text-sm transition-colors hover:text-stone-950" />
             </nav>
         </div>

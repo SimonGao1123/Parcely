@@ -36,6 +36,7 @@ class StoreFrontSummarySerializer(serializers.ModelSerializer):
         queryset=Page.objects.all(), source="homepage", write_only=True,
         required=False, allow_null=True,
     )
+
     
     class Meta:
         model = StoreFront
@@ -43,7 +44,7 @@ class StoreFrontSummarySerializer(serializers.ModelSerializer):
             "id", "title", "description", "slug", "theme", "style",
             "logo_image", "banner_image", "owner",
             "logo_image_id", "banner_image_id",
-            "created_at", "updated_at",
+            "created_at", "updated_at", "is_draft", 
             "homepage", "homepage_id"
         ]
         read_only_fields = ['id', 'slug', 'created_at', 'updated_at']
@@ -77,7 +78,7 @@ class StoreFrontSerializer(serializers.ModelSerializer):
             "id", "title", "description", "slug", "theme", "style",
             "logo_image", "banner_image", "owner",
             "logo_image_id", "banner_image_id",
-            "created_at", "updated_at",
+            "created_at", "updated_at", "is_draft",
             "pages", "homepage", "homepage_id"
         ]
         read_only_fields = ['id', 'slug', 'created_at', 'updated_at']

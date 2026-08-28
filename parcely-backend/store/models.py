@@ -61,6 +61,8 @@ class StoreFront(TimestampedModel):
 
     homepage = models.ForeignKey("Page", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
 
+    is_draft = models.BooleanField(default=True)
+
     def __init__(self, *args, **kwargs): # keep track of previous state so only run validation for homepage
         super().__init__(*args, **kwargs)
         self._original_title = self.title

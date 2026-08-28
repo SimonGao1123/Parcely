@@ -34,6 +34,7 @@ export type StorefrontSummary = {
     homepage: PageSummary | null;
     created_at: string;
     updated_at: string;
+    is_draft: boolean;
 };
 
 // Mirrors StoreFrontSerializer.

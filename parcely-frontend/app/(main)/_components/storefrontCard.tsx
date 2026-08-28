@@ -6,7 +6,7 @@ import type { StorefrontSummary } from "@/types/storefront";
 
 export default function StorefrontCard({storefront}: {storefront: StorefrontSummary}) {
     // will get storefronts FROM storefront list api AND all storefronts view
-    const { title, banner_image, logo_image } = storefront;
+    const { title, banner_image, logo_image, is_draft } = storefront;
 
     return (
         // TODO: point at the storefront route once it exists
@@ -23,6 +23,14 @@ export default function StorefrontCard({storefront}: {storefront: StorefrontSumm
                     unoptimized
                     className="object-cover transition-transform duration-300 group-hover:scale-105"
                 />
+            )}
+
+            {/* only ever visible on /personal — the public list filters drafts out.
+                z-10 keeps it above the hover overlay, which would otherwise darken it. */}
+            {is_draft && (
+                <span className="absolute top-3 left-3 z-10 rounded-full bg-stone-700/90 px-2.5 py-1 text-[11px] font-semibold tracking-wider text-white">
+                    DRAFT
+                </span>
             )}
 
             <div className="absolute inset-0 flex items-end bg-linear-to-t from-black/70 via-black/20 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100">
