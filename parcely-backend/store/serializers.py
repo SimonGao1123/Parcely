@@ -123,6 +123,24 @@ class PageBlockSerializer(serializers.ModelSerializer):
         fields = ['id', 'kind', 'content', 'style', 'layout', 'page', 'created_at', 'updated_at', 'resolved_content']
         read_only_fields = ['id', 'created_at', 'updated_at', 'page']
 
+
+class BlockLayoutItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    # plain JSONField: the shape is enforced by normalize_page_block_layout in the
+    # view, which is the same pydantic pass PageBlock.save() would have run
+    layout = serializers.JSONField()
+
+
+class PageLayoutSerializer(serializers.Serializer):
+    """Payload for repositioning several blocks in one request.
+
+    Layout is the only block field with a page-wide invariant (no two blocks may
+    overlap), so it's the only one that can't be updated a block at a time —
+    rearrangements pass through intermediate states that overlap.
+    """
+    blocks = BlockLayoutItemSerializer(many=True)
+
+
 class PageSerializer(serializers.ModelSerializer):
     logo_image = BlobSerializer(read_only=True)
     # storefront = StoreFrontSummarySerializer(read_only=True) unecessary currently

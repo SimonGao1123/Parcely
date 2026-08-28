@@ -9,9 +9,24 @@ type ImagePickerProps = {
     onChange: (file: File | null) => void;
     // the already-stored image, shown when no new file is staged (edit flow)
     existingUrl?: string | null;
+    // Edit flow only. `file: null` already means "nothing staged", which on a
+    // PATCH is a different intent from "detach the stored image" — one omits
+    // the id, the other sends null. Supplying this is what separates them, so
+    // the create flow behaves exactly as before by leaving it out.
+    onRemoveExisting?: () => void;
+    // Storefront and page logos are images, but a media block renders video too
+    // (BlobMedia branches on blob.kind), so that caller widens this.
+    accept?: string;
 };
 
-export default function ImagePicker({ label, file, onChange, existingUrl }: ImagePickerProps) {
+export default function ImagePicker({
+    label,
+    file,
+    onChange,
+    existingUrl,
+    onRemoveExisting,
+    accept = "image/*",
+}: ImagePickerProps) {
     const inputRef = useRef<HTMLInputElement>(null);
 
     // derived during render rather than set from an effect, so the preview is
@@ -44,7 +59,7 @@ export default function ImagePicker({ label, file, onChange, existingUrl }: Imag
                 <input
                     ref={inputRef}
                     type="file"
-                    accept="image/*"
+                    accept={accept}
                     onChange={(e) => onChange(e.target.files?.[0] ?? null)}
                     className="text-sm text-stone-600 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-stone-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:text-stone-700 hover:file:border-stone-500"
                 />
@@ -59,6 +74,13 @@ export default function ImagePicker({ label, file, onChange, existingUrl }: Imag
                         }}
                     >
                         Clear
+                    </Button>
+                )}
+                {/* Detach only — the blob is deliberately left in S3. Nothing
+                    checks whether a page block still references it by id. */}
+                {onRemoveExisting && existingUrl && !file && (
+                    <Button variant="link" onClick={onRemoveExisting}>
+                        Remove
                     </Button>
                 )}
             </div>

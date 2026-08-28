@@ -5,20 +5,13 @@ import { useMemo } from "react";
 import type { Storefront } from "@/types/storefront";
 import { ThemedNavbar } from "./themed/registry";
 import { useNavbarVisibility } from "@/components/useNavbarVisibility";
+import { orderPages } from "./orderPages";
 import { styleVars } from "./styleVars";
 
 export default function StorefrontNavbar({ storefront }: { storefront: Storefront }) {
     const visible = useNavbarVisibility();
 
-    // Page has no ordering column yet, so the homepage is pinned to the front
-    // and the rest keep the order the API returned.
-    const pages = useMemo(() => {
-        const homepageId = storefront.homepage?.id;
-        if (homepageId == null) return storefront.pages;
-        const homepage = storefront.pages.find((p) => p.id === homepageId);
-        if (!homepage) return storefront.pages;
-        return [homepage, ...storefront.pages.filter((p) => p.id !== homepageId)];
-    }, [storefront.pages, storefront.homepage]);
+    const pages = useMemo(() => orderPages(storefront), [storefront]);
 
     return (
         <div
@@ -29,6 +22,7 @@ export default function StorefrontNavbar({ storefront }: { storefront: Storefron
                 visible ? "translate-y-0" : "-translate-y-full"
             }`}
         >
+            
             <ThemedNavbar theme={storefront.theme} storefront={storefront} pages={pages} />
         </div>
     );

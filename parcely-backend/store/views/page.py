@@ -7,8 +7,7 @@ from rest_framework import status
 from store.models import Page, PageBlock, StoreFront
 from store.serializers import PageSerializer, PageSummarySerializer
 from store.access import visible_storefront_q
-from products.models import Product
-from s3.models import Blob
+from store.block_context import block_reference_context
 # Forward FKs read by PageSerializer (which nests StoreFrontSummarySerializer,
 # which reads homepage.logo_image).
 SELECT_FIELDS = (
@@ -55,50 +54,7 @@ class PageDetailAPIView(generics.RetrieveAPIView):
         ctx = super().get_serializer_context()
 
         page = self.get_object() # uses memoized and retrieved also uses memoized
-
-        product_ids: set[int] = set()
-        blob_ids: set[int] = set()
-
-        for block in page.blocks.all(): # already pre fetched
-            content = block.content or {}
-            kind = block.kind
-            if kind == 'product':
-                pid = content.get('product_id')
-                if pid:
-                    product_ids.add(pid)
-            elif kind == 'media':
-                mid = content.get('media_id')
-                if mid:
-                    blob_ids.add(mid)
-            elif kind == 'gallery':
-                blob_ids.update(content.get('gallery_ids', []))
-            elif kind == 'slideshow':
-                blob_ids.update(content.get('slideshow_ids', []))
-
-        # only query if something to fetch - avoids empty in() queries.
-        # scoped to the storefront so read-time enforcement matches the write-time
-        # rules in validate_page_block_content: a ref that was valid at write time
-        # but has since been moved/reassigned drops out and resolves to None,
-        # same as a deleted one. this endpoint is public, so it can't trust the
-        # ids in content on their own.
-        ctx['products'] = (
-            {
-                p.pk: p
-                for p in Product.objects.filter(
-                    id__in=product_ids, storefront=page.storefront
-                )
-            }
-            if product_ids else {}
-        )
-        ctx['blobs'] = (
-            {
-                b.pk: b
-                for b in Blob.objects.filter(
-                    id__in=blob_ids, uploader_id=page.storefront.owner_id
-                )
-            }
-            if blob_ids else {}
-        )
+        ctx.update(block_reference_context(page.blocks.all(), page.storefront)) # blocks already prefetched
         return ctx
 
 

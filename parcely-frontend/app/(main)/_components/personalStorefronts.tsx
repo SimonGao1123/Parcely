@@ -26,7 +26,11 @@ export default async function PersonalStorefronts({ query }: { query: Storefront
             ) : (
                 <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                     {results.map((storefront) => (
-                        <StorefrontCard key={storefront.id} storefront={storefront} />
+                        <StorefrontCard
+                            key={storefront.id}
+                            storefront={storefront}
+                            settingsHref={`/${storefront.slug}/settings`}
+                        />
                     ))}
                 </div>
             )}

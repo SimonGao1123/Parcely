@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { apiFetch } from "@/lib/api.server";
+import { errorFrom } from "@/lib/api/formatErrors";
 import type { StorefrontStyle, Theme } from "@/types/storefront";
 
 export type CreateStorefrontInput = {
@@ -14,20 +15,6 @@ export type CreateStorefrontInput = {
     banner_image_id: number | null;
 };
 
-// DRF hands back either {"detail": "..."} or {"field": ["msg", ...]}
-function formatErrors(body: unknown): string {
-    if (typeof body !== "object" || body === null) return "Failed to create storefront.";
-    const entries = Object.entries(body as Record<string, unknown>);
-    if (entries.length === 0) return "Failed to create storefront.";
-
-    return entries
-        .map(([field, messages]) => {
-            const text = Array.isArray(messages) ? messages.join(" ") : String(messages);
-            return field === "detail" ? text : `${field}: ${text}`;
-        })
-        .join("\n");
-}
-
 // Errors come back as data rather than thrown: redirect() signals itself by
 // throwing, so a caller that wrapped this in try/catch would swallow it.
 export async function createStorefront(input: CreateStorefrontInput): Promise<{ error: string } | void> {
@@ -37,7 +24,7 @@ export async function createStorefront(input: CreateStorefrontInput): Promise<{ 
     });
 
     if (!response.ok) {
-        return { error: formatErrors(await response.json().catch(() => null)) };
+        return { error: await errorFrom(response, "Failed to create storefront.") };
     }
 
     const { slug, homepage } = await response.json();
