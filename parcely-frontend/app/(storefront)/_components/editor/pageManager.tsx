@@ -12,10 +12,11 @@ import type { Storefront } from "@/types/storefront";
 import { orderPages } from "../storefront/orderPages";
 import PageForm, { type PageFormValue } from "./pageForm";
 
-// /<storefrontSlug>/settings is a static route, so it wins over the dynamic
-// /<storefrontSlug>/<pageSlug>. A page slugged "settings" would still be
-// created fine but its public URL would resolve to this screen instead.
-const RESERVED_SLUGS = new Set(["settings"]);
+// /<storefrontSlug>/settings and /<storefrontSlug>/products are static routes,
+// so they win over the dynamic /<storefrontSlug>/<pageSlug>. A page slugged
+// either would still be created fine but its public URL would resolve to the
+// editor screen instead.
+const RESERVED_SLUGS = new Set(["settings", "products"]);
 
 // Approximates django.utils.text.slugify well enough to catch the collision
 // above. It does not have to match exactly — the backend remains authoritative

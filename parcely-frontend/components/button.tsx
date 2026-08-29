@@ -19,8 +19,11 @@ const VARIANTS: Record<ButtonVariant, string> = {
     unstyled: "",
 };
 
-const CHIP_ON = "border-stone-800 bg-stone-800 text-stone-50";
-const CHIP_OFF = "border-stone-300 text-stone-700 hover:border-stone-500";
+// Exported because the settings tabs are <Link>s and so can't be Buttons, but
+// have to look exactly like a chip. Sharing the tokens keeps them from drifting.
+export const CHIP_BASE = "rounded-full border px-3 py-1 text-sm transition-colors";
+export const CHIP_ON = "border-stone-800 bg-stone-800 text-stone-50";
+export const CHIP_OFF = "border-stone-300 text-stone-700 hover:border-stone-500";
 
 type ButtonProps = ComponentProps<"button"> & {
     variant?: ButtonVariant;

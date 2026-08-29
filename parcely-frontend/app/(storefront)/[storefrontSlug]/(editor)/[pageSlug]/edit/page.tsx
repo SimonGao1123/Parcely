@@ -1,4 +1,5 @@
 import { getPage } from "@/lib/api/page/getPage";
+import { getProducts } from "@/lib/api/product/getProducts";
 import PageEditor from "@/app/(storefront)/_components/editor/pageEditor";
 import { requireStorefrontOwner } from "@/app/(storefront)/_components/editor/requireOwner";
 import { orderPages } from "@/app/(storefront)/_components/storefront/orderPages";
@@ -9,9 +10,10 @@ export default async function EditPage({ params }: PageProps<"/[storefrontSlug]/
     const { storefrontSlug, pageSlug } = await params;
 
     // independent requests — awaiting them in sequence would waterfall
-    const [page, storefront] = await Promise.all([
+    const [page, storefront, products] = await Promise.all([
         getPage(storefrontSlug, pageSlug),
         requireStorefrontOwner(storefrontSlug),
+        getProducts(storefrontSlug),
     ]);
 
     // ThemedNavbar directly rather than StorefrontNavbar: the latter is a client
@@ -35,5 +37,5 @@ export default async function EditPage({ params }: PageProps<"/[storefrontSlug]/
         </div>
     );
 
-    return <PageEditor page={page} storefront={storefront} chrome={chrome} />;
+    return <PageEditor page={page} storefront={storefront} products={products} chrome={chrome} />;
 }

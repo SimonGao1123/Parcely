@@ -22,6 +22,12 @@ class ProductListCreateAPIView(generics.ListCreateAPIView):
     MUST BE AUTHED, CREATE NEW PRODUCT AND VIEW ALL PRODUCTS FOR A SPECIFIC STOREFRONT
     """
     serializer_class = ProductSummarySerializer
+    # Unpaginated, unlike the storefront lists. Both callers - the catalogue
+    # screen and the editor's product picker - need every product, and a picker
+    # that silently stopped at PAGE_SIZE would hide the rest with no way to
+    # reach them. Products are bounded per storefront in a way storefronts are
+    # not.
+    pagination_class = None
 
     def get_queryset(self):
         return (

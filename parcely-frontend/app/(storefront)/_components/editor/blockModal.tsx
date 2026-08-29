@@ -4,34 +4,47 @@ import { useRef, useState } from "react";
 import Button from "@/components/button";
 import { useUploadFile } from "@/lib/api/s3/uploadFile";
 import type { BlockDraft, DraftKind, PageBlock, PageBlockStyle } from "@/types/block";
-import type { MediaBlob } from "@/types/blob";
+import type { Product } from "@/types/product";
 import { isResolvedBlob } from "../pageblock/blocks/resolved";
 import ImagePicker from "../storefront/form/imagePicker";
 import BlockStyleForm, { DEFAULT_PAGE_BLOCK_STYLE } from "./blockStyleForm";
-import MediaListPicker from "./mediaListPicker";
+import MediaListPicker, { type ExistingMedia } from "./mediaListPicker";
 import Modal from "./modal";
+import ProductPicker from "./product/productPicker";
 import { KIND_LABELS } from "./stagedBlock";
 
-const KINDS: DraftKind[] = ["text", "media", "gallery", "slideshow"];
+const KINDS: DraftKind[] = ["text", "media", "product", "gallery", "slideshow"];
 
 export type BlockSubmit = { draft: BlockDraft; style: PageBlockStyle };
 
-// Product blocks can't be edited here either, so a product block's gear has
-// nothing to open — PageEditor is what keeps one from being passed in.
 function initialKind(block: PageBlock | undefined): DraftKind {
-    return block && block.kind !== "product" ? block.kind : "text";
+    return block?.kind ?? "text";
 }
 
-function initialList(block: PageBlock | undefined): MediaBlob[] {
+// Seeded from content, not resolved_content: content is the authoritative list
+// of ids, and an edit has to send every one of them back or the ones it left out
+// are deleted from the block as a side effect of saving something else. Entries
+// that failed to resolve are carried through as ids with no preview rather than
+// dropped.
+//
+// Zipped by index rather than looked up by id, because resolved_content lines up
+// index-for-index with content and the same blob may legitimately appear twice.
+function initialList(block: PageBlock | undefined): ExistingMedia[] {
     if (block?.kind !== "gallery" && block?.kind !== "slideshow") return [];
-    // Unresolvable entries come back as raw ids and are dropped rather than
-    // carried forward — they are references to blobs that are already gone, so
-    // re-sending them would just fail validation.
-    return block.resolved_content.filter(isResolvedBlob);
+
+    const ids =
+        block.kind === "gallery" ? block.content.gallery_ids : block.content.slideshow_ids;
+
+    return ids.map((id, index) => {
+        const entry = block.resolved_content[index];
+        return { id, blob: entry !== undefined && isResolvedBlob(entry) ? entry : null };
+    });
 }
 
 export default function BlockModal({
     block,
+    products,
+    storefrontSlug,
     pending,
     onSubmit,
     onDelete,
@@ -39,6 +52,9 @@ export default function BlockModal({
 }: {
     // absent in the create flow
     block?: PageBlock;
+    // the whole catalogue, fetched by the route — the picker never loads
+    products: Product[];
+    storefrontSlug: string;
     pending: boolean;
     // resolves true when the caller accepted it, which is what closes the modal
     onSubmit: (value: BlockSubmit) => Promise<boolean>;
@@ -52,9 +68,14 @@ export default function BlockModal({
     const [error, setError] = useState<string | null>(null);
 
     const [text, setText] = useState(block?.kind === "text" ? block.content.text : "");
+    // Seeded from content, not resolved_content, for the same reason as
+    // initialList: the stored id has to survive an edit that never touched it.
+    const [productId, setProductId] = useState<number | null>(
+        block?.kind === "product" ? block.content.product_id : null,
+    );
     const [mediaFile, setMediaFile] = useState<File | null>(null);
     const [listFiles, setListFiles] = useState<File[]>([]);
-    const [existingList, setExistingList] = useState<MediaBlob[]>(() => initialList(block));
+    const [existingList, setExistingList] = useState<ExistingMedia[]>(() => initialList(block));
 
     // Confirmed blobs are permanent, so a failed submit must not upload a second
     // copy on retry. Same cache as pageForm and storefrontSettings.
@@ -82,6 +103,8 @@ export default function BlockModal({
                 return text.trim().length > 0;
             case "media":
                 return mediaFile !== null || existingMediaId !== null;
+            case "product":
+                return productId !== null;
             case "gallery":
             case "slideshow":
                 return listCount > 0;
@@ -96,10 +119,13 @@ export default function BlockModal({
                 const id = mediaFile ? await uploadOnce(mediaFile) : existingMediaId;
                 return { kind: "media", content: { media_id: id as number } };
             }
+            case "product":
+                return { kind: "product", content: { product_id: productId as number } };
             case "gallery":
             case "slideshow": {
-                // stored first, then newly staged — the order shown in the picker
-                const ids = [...existingList.map((blob) => blob.id)];
+                // every id still on the block, then the newly staged ones — the
+                // order shown in the picker
+                const ids = existingList.map((item) => item.id);
                 for (const file of listFiles) ids.push(await uploadOnce(file));
                 return kind === "gallery"
                     ? { kind: "gallery", content: { gallery_ids: ids } }
@@ -174,14 +200,25 @@ export default function BlockModal({
                     />
                 )}
 
+                {kind === "product" && (
+                    <ProductPicker
+                        products={products}
+                        value={productId}
+                        onChange={setProductId}
+                        storefrontSlug={storefrontSlug}
+                    />
+                )}
+
                 {(kind === "gallery" || kind === "slideshow") && (
                     <MediaListPicker
                         label={KIND_LABELS[kind]}
                         files={listFiles}
                         onChange={setListFiles}
                         existing={existingList}
-                        onRemoveExisting={(id) =>
-                            setExistingList((current) => current.filter((blob) => blob.id !== id))
+                        // by index, not id: the same blob can appear twice, and
+                        // removing one copy must not take the other with it
+                        onRemoveExisting={(index) =>
+                            setExistingList((current) => current.filter((_, i) => i !== index))
                         }
                     />
                 )}

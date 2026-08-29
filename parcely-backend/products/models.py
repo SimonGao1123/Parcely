@@ -42,7 +42,24 @@ class Product(TimestampedModel):
             raise ValidationError("Display image must be an image")
         if self.display_image is not None and self.display_image.uploader != self.storefront.owner:
             raise ValidationError("Display image must be uploaded by the storefront owner")
-    
+
+        # Plan.clean() validates against product.is_subscription, but only when
+        # the plan itself is saved - flipping the flag underneath existing plans
+        # would leave every one of them violating a rule they can no longer be
+        # re-saved past. Guarded on pk so creates skip the query.
+        if self.pk:
+            original = (
+                Product.objects
+                .filter(pk=self.pk)
+                .values_list('is_subscription', flat=True)
+                .first()
+            )
+            if original is not None and original != self.is_subscription and self.plans.exists():
+                raise ValidationError(
+                    "Delete this product's plans before changing whether it is a subscription"
+                )
+
+
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)

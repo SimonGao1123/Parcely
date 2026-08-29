@@ -5,15 +5,18 @@ export type BlockSpan = { col_span: number; row_span: number };
 // Seeds only — a block is resized on the grid once it lands, so these just need
 // to be plausible and to fit inside the 12 columns.
 export const DEFAULT_SPANS: Record<DraftKind, BlockSpan> = {
-    text: { col_span: 6, row_span: 2 },
-    media: { col_span: 6, row_span: 4 },
-    gallery: { col_span: 12, row_span: 6 },
-    slideshow: { col_span: 12, row_span: 6 },
+    text: { col_span: 3, row_span: 2 },
+    media: { col_span: 3, row_span: 3 },
+    // wider than the rest: a product sits image-left / details-right
+    product: { col_span: 8, row_span: 4 },
+    gallery: { col_span: 5, row_span: 5 },
+    slideshow: { col_span: 3, row_span: 3 },
 };
 
 export const KIND_LABELS: Record<DraftKind, string> = {
     text: "Text",
     media: "Media",
+    product: "Product",
     gallery: "Gallery",
     slideshow: "Slideshow",
 };
@@ -40,6 +43,10 @@ export function draftSummary(draft: BlockDraft): string {
         }
         case "media":
             return "1 file";
+        // the chip is only alive between Add and the drop, so an id is enough
+        // to tell two staged products apart
+        case "product":
+            return `#${draft.content.product_id}`;
         case "gallery":
             return `${draft.content.gallery_ids.length} items`;
         case "slideshow":

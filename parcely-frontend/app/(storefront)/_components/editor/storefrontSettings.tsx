@@ -11,6 +11,7 @@ import ImagePicker from "../storefront/form/imagePicker";
 import StyleSelector from "../storefront/form/styleSelector";
 import ThemeSelector from "../storefront/form/themeSelector";
 import PageManager from "./pageManager";
+import SettingsTabs from "./settingsTabs";
 
 const inputClass =
     "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none";
@@ -123,6 +124,8 @@ export default function StorefrontSettings({ storefront }: { storefront: Storefr
                 </Link>
                 <h1 className="text-lg font-semibold text-stone-900">Settings</h1>
             </div>
+
+            <SettingsTabs storefrontSlug={storefront.slug} active="settings" />
 
             <form onSubmit={handleSave} className="flex flex-col gap-6">
                 <label className="flex flex-col gap-1">

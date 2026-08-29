@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* Server-render fallback for the storefront navbar height. StorefrontNavbar
+   measures the real bar on mount and overwrites this on the root element; this
+   value only governs the first paint, so it's a rough middle of the five themes
+   rather than any one of them. */
+:root {
+    --sf-nav-h: 4rem;
+}
+
 /* Grid placement comes from the database, so it can't be expressed as Tailwind
    classes, and inline styles can't carry media queries. Blocks set the --blk-*
    vars inline; these rules turn them into grid properties at each breakpoint.

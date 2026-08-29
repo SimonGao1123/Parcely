@@ -5,6 +5,11 @@ import { useEffect, useMemo, useRef } from "react";
 import Button from "@/components/button";
 import type { MediaBlob } from "@/types/blob";
 
+// An id already on the block. blob is null when it no longer resolves — the id
+// is still carried so that saving doesn't quietly drop it, but there is nothing
+// to show a preview of.
+export type ExistingMedia = { id: number; blob: MediaBlob | null };
+
 // Gallery and slideshow hold an ordered list of blob ids, so this is
 // ImagePicker's shape widened to many files. The emitted order is stored-then-
 // staged, which is the order the caller writes into gallery_ids/slideshow_ids.
@@ -18,9 +23,10 @@ export default function MediaListPicker({
     label: string;
     files: File[];
     onChange: (files: File[]) => void;
-    // already-stored blobs, in their persisted order; empty in the create flow
-    existing: MediaBlob[];
-    onRemoveExisting: (id: number) => void;
+    // already-stored ids, in their persisted order; empty in the create flow
+    existing: ExistingMedia[];
+    // by index, since the same blob may appear more than once
+    onRemoveExisting: (index: number) => void;
 }) {
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -42,18 +48,24 @@ export default function MediaListPicker({
 
             {total > 0 && (
                 <ul className="flex flex-wrap gap-2">
-                    {existing.map((blob) => (
-                        <li key={`blob-${blob.id}`} className="flex flex-col items-center gap-1">
-                            {/* presigned urls expire, so they can't be optimized */}
-                            <Image
-                                src={blob.url}
-                                alt=""
-                                width={80}
-                                height={64}
-                                unoptimized
-                                className="h-16 w-20 rounded border border-stone-200 object-cover"
-                            />
-                            <Button variant="link" onClick={() => onRemoveExisting(blob.id)}>
+                    {existing.map((item, index) => (
+                        <li key={`existing-${index}-${item.id}`} className="flex flex-col items-center gap-1">
+                            {item.blob ? (
+                                /* presigned urls expire, so they can't be optimized */
+                                <Image
+                                    src={item.blob.url}
+                                    alt=""
+                                    width={80}
+                                    height={64}
+                                    unoptimized
+                                    className="h-16 w-20 rounded border border-stone-200 object-cover"
+                                />
+                            ) : (
+                                <span className="flex h-16 w-20 items-center justify-center rounded border border-dashed border-stone-300 text-center text-[10px] text-stone-400">
+                                    Unavailable
+                                </span>
+                            )}
+                            <Button variant="link" onClick={() => onRemoveExisting(index)}>
                                 Remove
                             </Button>
                         </li>

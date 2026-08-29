@@ -45,12 +45,7 @@ export default function Block({ block }: { block: PageBlock }) {
     return (
         <div
             style={style}
-            // TEMP: outline so block bounds are visible while building the grid.
-            // outline rather than border — it draws outside the box and so can't
-            // shift anything. The negative offset pulls the stroke back inside the
-            // block, since at zero gap an outward one paints over its neighbours.
-            // Remove when the editor lands.
-            className="page-block bg-[var(--sf-bg)] font-[family-name:var(--sf-font)] text-[var(--sf-fg)] [outline:1px_solid_black] [outline-offset:-1px]"
+            className="page-block bg-[var(--sf-bg)] font-[family-name:var(--sf-font)] text-[var(--sf-fg)]"
         >
             <BlockContent block={block} />
         </div>

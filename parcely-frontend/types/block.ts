@@ -95,14 +95,12 @@ export type PageBlock =
     | SlideshowBlock;
 
 // A block the editor has composed but not yet created, so there is no PageBlock
-// to narrow through and kind/content have to be correlated on their own.
-//
-// Product is absent on purpose: it needs a product_id from a storefront that has
-// no product-creation UI, and ProductBlock renders null, so one could only ever
-// be a blank rectangle. That is also why this can't just be keyed on BlockKind.
+// to narrow through and kind/content have to be correlated on their own. That
+// pairing is why this is spelled out rather than keyed on BlockKind.
 export type BlockDraft =
     | { kind: "text"; content: TextContent }
     | { kind: "media"; content: MediaContent }
+    | { kind: "product"; content: ProductContent }
     | { kind: "gallery"; content: GalleryContent }
     | { kind: "slideshow"; content: SlideshowContent };
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Button from "@/components/button";
 import type { SlideshowBlock as SlideshowBlockData } from "@/types/block";
+import { objectPositionClass } from "./alignment";
 import BlobMedia from "./blobMedia";
 import { isResolvedBlob } from "./resolved";
 
@@ -19,7 +20,10 @@ export default function SlideshowBlock({ block }: { block: SlideshowBlockData })
 
     return (
         <div className="relative h-full w-full overflow-hidden">
-            <BlobMedia blob={blobs[current]} className="h-full w-full object-cover" />
+            <BlobMedia
+                blob={blobs[current]}
+                className={`h-full w-full object-cover ${objectPositionClass(block.style.alignment)}`}
+            />
 
             {blobs.length > 1 && (
                 <>

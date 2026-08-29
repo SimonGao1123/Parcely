@@ -7,6 +7,7 @@ import { deletePageBlock } from "@/lib/api/page/deletePageBlock";
 import { updatePageBlock } from "@/lib/api/page/updatePageBlock";
 import type { BlockPosition, PageBlock } from "@/types/block";
 import type { Page } from "@/types/page";
+import type { Product } from "@/types/product";
 import type { Storefront } from "@/types/storefront";
 import Block from "../pageblock/block";
 import { blockLayoutVars } from "../pageblock/blockStyle";
@@ -24,6 +25,19 @@ import {
 } from "./gridGeometry";
 import { DEFAULT_SPANS, type StagedBlock } from "./stagedBlock";
 import { useLayoutAutosave } from "./useLayoutAutosave";
+
+const CELL = "calc(100cqw / 12)";
+
+// Cell guides ride on the grid's own background rather than a stacked overlay:
+// an element's background always paints beneath its children, so blocks cover
+// the lines without needing a z-index or a new stacking context. The grey is
+// translucent so it reads on both light and dark storefront backgrounds.
+const CELL_GUIDES = {
+    backgroundImage:
+        "linear-gradient(to right, rgb(128 128 128 / 0.35) 1px, transparent 1px)," +
+        "linear-gradient(to bottom, rgb(128 128 128 / 0.35) 1px, transparent 1px)",
+    backgroundSize: `${CELL} ${CELL}`,
+};
 
 type DragState = {
     blockId: number;
@@ -49,10 +63,13 @@ function samePosition(a: BlockPosition, b: BlockPosition): boolean {
 export default function PageEditor({
     page,
     storefront,
+    products,
     chrome,
 }: {
     page: Page;
     storefront: Storefront;
+    // the whole catalogue, so the block modal's product picker never loads
+    products: Product[];
     // The real navbar and header, rendered on the server by the route so they
     // stay out of the client bundle.
     chrome?: React.ReactNode;
@@ -75,7 +92,7 @@ export default function PageEditor({
     const { status, retry } = useLayoutAutosave(storefront.slug, page.slug, blocks);
 
     const rowCount = gridRowCount(blocks.map((block) => block.layout));
-    const rowTrack = { gridTemplateRows: `repeat(${rowCount}, calc(100cqw / 12))` };
+    const rowTrack = { gridTemplateRows: `repeat(${rowCount}, ${CELL})` };
 
     function beginDrag(event: PointerEvent<HTMLElement>, block: PageBlock, mode: DragState["mode"]) {
         event.preventDefault();
@@ -313,7 +330,7 @@ export default function PageEditor({
                 <div
                     ref={gridRef}
                     className="grid grid-cols-12"
-                    style={{ ...rowTrack, gridAutoRows: "calc(100cqw / 12)" }}
+                    style={{ ...rowTrack, gridAutoRows: CELL, ...CELL_GUIDES }}
                 >
                     {blocks.map((block) => (
                         <Block key={block.id} block={block} />
@@ -327,7 +344,7 @@ export default function PageEditor({
                     Empty cells stay click-through. */}
                 <div
                     className="pointer-events-none absolute inset-0 grid grid-cols-12"
-                    style={{ ...rowTrack, gridAutoRows: "calc(100cqw / 12)" }}
+                    style={{ ...rowTrack, gridAutoRows: CELL }}
                 >
                     {blocks.map((block) => (
                         <div
@@ -339,22 +356,17 @@ export default function PageEditor({
                             onPointerUp={endDrag}
                             onPointerCancel={endDrag}
                         >
-                            {/* No gear on product blocks: the modal has no form
-                                that can express a product_id, so there would be
-                                nothing for it to open. */}
-                            {block.kind !== "product" && (
-                                <Button
-                                    variant="unstyled"
-                                    aria-label="Edit block"
-                                    // stopPropagation so pressing the gear opens
-                                    // the modal instead of starting a move
-                                    onPointerDown={(event) => event.stopPropagation()}
-                                    onClick={() => setModal({ mode: "edit", blockId: block.id })}
-                                    className="absolute top-0 right-0 bg-sky-500 px-1.5 py-0.5 text-xs leading-none text-white opacity-0 group-hover:opacity-100"
-                                >
-                                    ⚙
-                                </Button>
-                            )}
+                            <Button
+                                variant="unstyled"
+                                aria-label="Edit block"
+                                // stopPropagation so pressing the gear opens
+                                // the modal instead of starting a move
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={() => setModal({ mode: "edit", blockId: block.id })}
+                                className="absolute top-0 right-0 bg-sky-500 px-1.5 py-0.5 text-xs leading-none text-white opacity-0 group-hover:opacity-100"
+                            >
+                                ⚙
+                            </Button>
 
                             <div
                                 // stopPropagation so the corner resizes instead of
@@ -390,6 +402,8 @@ export default function PageEditor({
                     // remount per target so the form seeds from the right block
                     key={modal.mode === "edit" ? `edit-${modal.blockId}` : "create"}
                     block={editingBlock}
+                    products={products}
+                    storefrontSlug={storefront.slug}
                     pending={pending}
                     onSubmit={handleModalSubmit}
                     onDelete={modal.mode === "edit" ? handleDelete : undefined}
