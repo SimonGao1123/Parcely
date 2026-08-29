@@ -14,8 +14,11 @@ class PageSummarySerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Page
-        fields = ['id', 'title', 'slug', 'logo_image', 'logo_image_id', 'storefront']
-        read_only_fields = ['id', 'slug', 'storefront'] # storefront must be read only, cannot update a page to a diff storefront
+        # product is read only and set by create_product_page — a page cannot be
+        # attached to a product after the fact. Non-null marks a product page,
+        # which the navbar skips and the products tab lists instead.
+        fields = ['id', 'title', 'slug', 'logo_image', 'logo_image_id', 'storefront', 'product']
+        read_only_fields = ['id', 'slug', 'storefront', 'product'] # storefront must be read only, cannot update a page to a diff storefront
 
 class StoreFrontSummarySerializer(serializers.ModelSerializer):
     # just doesn't include all pages, only includes homepage summary
@@ -89,6 +92,7 @@ class PageBlockSerializer(serializers.ModelSerializer):
     def get_resolved_content(self, obj):
         products = self.context.get('products', {})
         blobs = self.context.get('blobs', {})
+        pages = self.context.get('pages', {})
 
         kind = obj.kind
         content = obj.content or {}
@@ -104,6 +108,16 @@ class PageBlockSerializer(serializers.ModelSerializer):
         if kind == 'media':
             media = blobs.get(content.get('media_id'))
             return BlobSerializer(media, context=self.context).data if media else None
+        # the target's slug is resolved here rather than stored on the block, so
+        # renaming a page can never leave a link pointing at a dead URL
+        if kind == 'link':
+            page = pages.get(content.get('page_id'))
+            media = blobs.get(content.get('media_id'))
+            return {
+                'page': PageSummarySerializer(page, context=self.context).data if page else None,
+                'media': BlobSerializer(media, context=self.context).data if media else None,
+                'text': content.get('text'),
+            }
         # unresolvable entries stay in place as their raw id, so positions line up
         # with content[*_ids] and the client can see which ones are gone
         if kind == 'gallery':
@@ -163,7 +177,7 @@ class PageSerializer(serializers.ModelSerializer):
             "id", "title", "slug", "is_homepage",
             "logo_image", "blocks",
             "logo_image_id",
-            "created_at", "updated_at", "storefront"
+            "created_at", "updated_at", "storefront", "product"
         ]
-        read_only_fields = ['id', 'slug', 'created_at', 'updated_at', 'storefront']
+        read_only_fields = ['id', 'slug', 'created_at', 'updated_at', 'storefront', 'product']
 

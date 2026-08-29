@@ -1,8 +1,9 @@
 from s3.models import Blob
+from store.models import Page
 
 
 def block_reference_context(blocks, storefront) -> dict:
-    """Build the {'products', 'blobs'} context PageBlockSerializer.get_resolved_content reads.
+    """Build the {'products', 'blobs', 'pages'} context PageBlockSerializer.get_resolved_content reads.
 
     Scoping mirrors the write-time rules in validate_page_block_content: a
     reference that was valid when written but has since been moved or reassigned
@@ -11,6 +12,7 @@ def block_reference_context(blocks, storefront) -> dict:
     """
     product_ids: set[int] = set()
     blob_ids: set[int] = set()
+    page_ids: set[int] = set()
 
     for block in blocks:
         content = block.content or {}
@@ -27,6 +29,13 @@ def block_reference_context(blocks, storefront) -> dict:
             blob_ids.update(content.get('gallery_ids', []))
         elif kind == 'slideshow':
             blob_ids.update(content.get('slideshow_ids', []))
+        elif kind == 'link':
+            pid = content.get('page_id')
+            if pid:
+                page_ids.add(pid)
+            mid = content.get('media_id')
+            if mid:
+                blob_ids.add(mid)
 
     products = {}
     if product_ids:
@@ -45,4 +54,15 @@ def block_reference_context(blocks, storefront) -> dict:
         if blob_ids else {}
     )
 
-    return {'products': products, 'blobs': blobs}
+    # select_related because PageSummarySerializer renders logo_image
+    pages = (
+        {
+            p.pk: p
+            for p in Page.objects.select_related('logo_image').filter(
+                id__in=page_ids, storefront=storefront,
+            )
+        }
+        if page_ids else {}
+    )
+
+    return {'products': products, 'blobs': blobs, 'pages': pages}

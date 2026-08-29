@@ -11,6 +11,8 @@ export const DEFAULT_SPANS: Record<DraftKind, BlockSpan> = {
     product: { col_span: 8, row_span: 4 },
     gallery: { col_span: 5, row_span: 5 },
     slideshow: { col_span: 3, row_span: 3 },
+    // tile-sized: several of these in a row is the point
+    link: { col_span: 3, row_span: 3 },
 };
 
 export const KIND_LABELS: Record<DraftKind, string> = {
@@ -19,6 +21,7 @@ export const KIND_LABELS: Record<DraftKind, string> = {
     product: "Product",
     gallery: "Gallery",
     slideshow: "Slideshow",
+    link: "Link",
 };
 
 // A block composed in the modal but not yet created. It has no id because it
@@ -51,5 +54,8 @@ export function draftSummary(draft: BlockDraft): string {
             return `${draft.content.gallery_ids.length} items`;
         case "slideshow":
             return `${draft.content.slideshow_ids.length} items`;
+        // the text when there is one, otherwise the target it points at
+        case "link":
+            return draft.content.text?.trim() || `→ #${draft.content.page_id}`;
     }
 }

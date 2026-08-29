@@ -4,16 +4,18 @@ import { useRef, useState } from "react";
 import Button from "@/components/button";
 import { useUploadFile } from "@/lib/api/s3/uploadFile";
 import type { BlockDraft, DraftKind, PageBlock, PageBlockStyle } from "@/types/block";
+import type { PageSummary } from "@/types/page";
 import type { Product } from "@/types/product";
 import { isResolvedBlob } from "../pageblock/blocks/resolved";
 import ImagePicker from "../storefront/form/imagePicker";
 import BlockStyleForm, { DEFAULT_PAGE_BLOCK_STYLE } from "./blockStyleForm";
 import MediaListPicker, { type ExistingMedia } from "./mediaListPicker";
 import Modal from "./modal";
+import PagePicker from "./pagePicker";
 import ProductPicker from "./product/productPicker";
 import { KIND_LABELS } from "./stagedBlock";
 
-const KINDS: DraftKind[] = ["text", "media", "product", "gallery", "slideshow"];
+const KINDS: DraftKind[] = ["text", "media", "product", "gallery", "slideshow", "link"];
 
 export type BlockSubmit = { draft: BlockDraft; style: PageBlockStyle };
 
@@ -44,6 +46,7 @@ function initialList(block: PageBlock | undefined): ExistingMedia[] {
 export default function BlockModal({
     block,
     products,
+    pages,
     storefrontSlug,
     pending,
     onSubmit,
@@ -54,6 +57,9 @@ export default function BlockModal({
     block?: PageBlock;
     // the whole catalogue, fetched by the route — the picker never loads
     products: Product[];
+    // every page of the storefront, product pages included: pointing a link at
+    // one is the reason the block exists
+    pages: PageSummary[];
     storefrontSlug: string;
     pending: boolean;
     // resolves true when the caller accepted it, which is what closes the modal
@@ -74,6 +80,20 @@ export default function BlockModal({
         block?.kind === "product" ? block.content.product_id : null,
     );
     const [mediaFile, setMediaFile] = useState<File | null>(null);
+
+    const [pageId, setPageId] = useState<number | null>(
+        block?.kind === "link" ? block.content.page_id : null,
+    );
+    const [linkText, setLinkText] = useState(
+        block?.kind === "link" ? (block.content.text ?? "") : "",
+    );
+    const [linkFile, setLinkFile] = useState<File | null>(null);
+    // Held in state rather than read off the block, because a link's media is
+    // optional and so can actually be removed — unlike a media block's.
+    const [linkMediaId, setLinkMediaId] = useState<number | null>(
+        block?.kind === "link" ? (block.content.media_id ?? null) : null,
+    );
+
     const [listFiles, setListFiles] = useState<File[]>([]);
     const [existingList, setExistingList] = useState<ExistingMedia[]>(() => initialList(block));
 
@@ -93,6 +113,12 @@ export default function BlockModal({
         block?.kind === "media" ? (block.resolved_content?.url ?? null) : null;
     const existingMediaId = block?.kind === "media" ? block.content.media_id : null;
 
+    // gated on linkMediaId so pressing Remove clears the preview too
+    const existingLinkUrl =
+        block?.kind === "link" && linkMediaId !== null
+            ? (block.resolved_content.media?.url ?? null)
+            : null;
+
     const listCount = existingList.length + listFiles.length;
 
     // A media block has no valid empty state, so its picker offers replace but
@@ -108,6 +134,13 @@ export default function BlockModal({
             case "gallery":
             case "slideshow":
                 return listCount > 0;
+            // a link with neither media nor text would render as nothing to
+            // click, which the backend schema rejects too
+            case "link":
+                return (
+                    pageId !== null &&
+                    (linkText.trim().length > 0 || linkFile !== null || linkMediaId !== null)
+                );
         }
     })();
 
@@ -130,6 +163,18 @@ export default function BlockModal({
                 return kind === "gallery"
                     ? { kind: "gallery", content: { gallery_ids: ids } }
                     : { kind: "slideshow", content: { slideshow_ids: ids } };
+            }
+            case "link": {
+                const mediaId = linkFile ? await uploadOnce(linkFile) : linkMediaId;
+                const text = linkText.trim();
+                return {
+                    kind: "link",
+                    content: {
+                        page_id: pageId as number,
+                        media_id: mediaId,
+                        text: text.length > 0 ? text : null,
+                    },
+                };
             }
         }
     };
@@ -207,6 +252,36 @@ export default function BlockModal({
                         onChange={setProductId}
                         storefrontSlug={storefrontSlug}
                     />
+                )}
+
+                {kind === "link" && (
+                    <>
+                        <PagePicker pages={pages} value={pageId} onChange={setPageId} />
+
+                        <label className="flex flex-col gap-1">
+                            <span className="text-sm font-medium text-stone-700">
+                                Text (optional)
+                            </span>
+                            <input
+                                type="text"
+                                value={linkText}
+                                onChange={(e) => setLinkText(e.target.value)}
+                                placeholder="Shop the collection"
+                                className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none"
+                            />
+                        </label>
+
+                        <ImagePicker
+                            label="Media (optional)"
+                            file={linkFile}
+                            onChange={setLinkFile}
+                            existingUrl={existingLinkUrl}
+                            // unlike the media block, media here is optional, so
+                            // detaching it is a legal edit as long as text remains
+                            onRemoveExisting={() => setLinkMediaId(null)}
+                            accept="image/*,video/*"
+                        />
+                    </>
                 )}
 
                 {(kind === "gallery" || kind === "slideshow") && (

@@ -4,6 +4,7 @@ from django.db import models, transaction
 from s3.models import Blob
 from accounts.models import AppUser
 from common.models import TimestampedModel
+from store.constants import RESERVED_PAGE_SLUGS
 from store.validators import validate_style, validate_page_block_style, validate_page_block_layout, validate_page_block_content, validate_page_layout, normalize_page_block_style, normalize_page_block_layout
 from django.utils.text import slugify
 from django.core.exceptions import ValidationError
@@ -39,6 +40,7 @@ class BlockType(models.TextChoices):
     PRODUCT = "product", "Product"
     GALLERY = "gallery", "Gallery"
     SLIDESHOW = "slideshow", "Slideshow"
+    LINK = "link", "Link" # media and/or text pointing at another page
 
 # Create your models here.
 
@@ -73,7 +75,11 @@ class StoreFront(TimestampedModel):
         super().clean()
         if self.homepage and self.homepage.storefront_id != self.pk:
             raise ValidationError("Homepage must belong to this storefront")
-        
+        # a product page is hidden from the navbar, so it would be a homepage
+        # with no way back to the rest of the storefront
+        if self.homepage and self.homepage.product_id is not None:
+            raise ValidationError("Homepage cannot be a product page")
+
         if self.banner_image is not None and self.banner_image.uploader != self.owner:
             raise ValidationError("Banner image must be uploaded by the storefront owner")
         if self.banner_image is not None and not self.banner_image.mime.startswith('image/'):
@@ -122,6 +128,14 @@ class Page(TimestampedModel):
     title = models.CharField(max_length=255)
     logo_image = models.ForeignKey(Blob, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
 
+    # Set only by create_product_page, and null for every hand-made page. A
+    # product page is skipped by the navbar and listed in the products tab
+    # instead. String reference because products.models imports this module, so
+    # a real import would cycle at startup.
+    product = models.OneToOneField(
+        "products.Product", on_delete=models.CASCADE, null=True, blank=True, related_name="page",
+    )
+
     def __init__(self, *args, **kwargs): # keep track of previous state so only run validation for page content
         super().__init__(*args, **kwargs)
         self._original_title = self.title
@@ -152,7 +166,9 @@ class Page(TimestampedModel):
         base = slugify(self.title)[:250] or "page"
         slug = base
         n = 1
-        while Page.objects.filter(slug=slug, storefront=self.storefront).exclude(pk=self.pk).exists():
+        # a reserved slug is treated as taken: product pages are named after the
+        # product and never pass through the frontend's reserved-name guard
+        while slug in RESERVED_PAGE_SLUGS or Page.objects.filter(slug=slug, storefront=self.storefront).exclude(pk=self.pk).exists():
             n += 1
             slug = f"{base}-{n}"
         return slug

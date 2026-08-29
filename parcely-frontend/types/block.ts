@@ -1,8 +1,9 @@
 import type { MediaBlob } from "@/types/blob";
+import type { PageSummary } from "@/types/page";
 import type { Product } from "@/types/product";
 import type { Alignment, FontFamily } from "@/types/style";
 
-export type BlockKind = "text" | "media" | "product" | "gallery" | "slideshow";
+export type BlockKind = "text" | "media" | "product" | "gallery" | "slideshow" | "link";
 
 export type BlockPosition = {
     row_start: number;
@@ -34,13 +35,21 @@ export type MediaContent = { media_id: number };
 export type ProductContent = { product_id: number };
 export type GalleryContent = { gallery_ids: number[] };
 export type SlideshowContent = { slideshow_ids: number[] };
+// page_id is required; media and text are each optional but at least one has to
+// be there, or the link would render as nothing to click.
+export type LinkContent = {
+    page_id: number;
+    media_id?: number | null;
+    text?: string | null;
+};
 
 export type BlockContent =
     | TextContent
     | MediaContent
     | ProductContent
     | GalleryContent
-    | SlideshowContent;
+    | SlideshowContent
+    | LinkContent;
 
 type PageBlockBase = {
     id: number;
@@ -87,12 +96,28 @@ export type SlideshowBlock = PageBlockBase & {
     resolved_content: (MediaBlob | number)[];
 };
 
+// The target page is resolved server-side rather than stored on the block, so
+// the slug is always current — renaming a page can't strand a link. `page` null
+// means the page is gone; media/text mirror whichever half the block has.
+export type ResolvedLink = {
+    page: PageSummary | null;
+    media: MediaBlob | null;
+    text: string | null;
+};
+
+export type LinkBlock = PageBlockBase & {
+    kind: "link";
+    content: LinkContent;
+    resolved_content: ResolvedLink;
+};
+
 export type PageBlock =
     | TextBlock
     | MediaBlock
     | ProductBlock
     | GalleryBlock
-    | SlideshowBlock;
+    | SlideshowBlock
+    | LinkBlock;
 
 // A block the editor has composed but not yet created, so there is no PageBlock
 // to narrow through and kind/content have to be correlated on their own. That
@@ -102,6 +127,7 @@ export type BlockDraft =
     | { kind: "media"; content: MediaContent }
     | { kind: "product"; content: ProductContent }
     | { kind: "gallery"; content: GalleryContent }
-    | { kind: "slideshow"; content: SlideshowContent };
+    | { kind: "slideshow"; content: SlideshowContent }
+    | { kind: "link"; content: LinkContent };
 
 export type DraftKind = BlockDraft["kind"];

@@ -59,6 +59,34 @@ class PageDetailAPIView(generics.RetrieveAPIView):
 
 
 
+class PageListAPIView(generics.ListAPIView):
+    """
+    MUST BE AUTHENTICATED, LIST EVERY PAGE OF A STOREFRONT OWNED BY THE AUTHENTICATED USER
+
+    ?type=product lists product pages, ?type=normal lists hand-made ones, omitted
+    lists both. The storefront detail response only carries the normal pages
+    (it feeds the navbar), so this is where the editor gets the rest.
+    """
+    serializer_class = PageSummarySerializer
+    # Unpaginated for the same reason as the product list: both callers - the
+    # products tab and the link block's page picker - need every page, and a
+    # picker that stopped at PAGE_SIZE would hide the rest with no way to reach
+    # them.
+    pagination_class = None
+
+    def get_queryset(self):
+        pages = Page.objects.select_related('logo_image').filter(
+            storefront__slug=self.kwargs['storefront_slug'],
+            storefront__owner=self.request.user,
+        )
+        kind = self.request.query_params.get('type')
+        if kind == 'product':
+            return pages.filter(product__isnull=False)
+        if kind == 'normal':
+            return pages.filter(product__isnull=True)
+        return pages
+
+
 class CreatePageAPIView(generics.CreateAPIView):
     """
     MUST BE AUTHENTICATED, CREATE NEW PAGE FOR SPECIFIC STOREFRONT
@@ -106,5 +134,9 @@ class DeletePageAPIView(generics.DestroyAPIView):
         page = self.get_object()
         if page.storefront.homepage == page:
             return Response(status=status.HTTP_400_BAD_REQUEST, data={"detail": "Cannot delete homepage"})
+        # a product must never be left without a page; deleting the product
+        # takes its page with it
+        if page.product_id is not None:
+            return Response(status=status.HTTP_400_BAD_REQUEST, data={"detail": "Delete the product instead"})
         self.perform_destroy(page)
         return Response(status=status.HTTP_204_NO_CONTENT)

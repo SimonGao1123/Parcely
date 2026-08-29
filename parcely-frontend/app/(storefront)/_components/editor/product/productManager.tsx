@@ -3,13 +3,16 @@
 import Link from "next/link";
 import { useState } from "react";
 import Button from "@/components/button";
+import { updatePage } from "@/lib/api/page/updatePage";
 import { createProduct } from "@/lib/api/product/createProduct";
 import { deleteProduct } from "@/lib/api/product/deleteProduct";
 import { createPlan, deletePlan, updatePlan, type PlanInput } from "@/lib/api/product/planActions";
 import { updateProduct } from "@/lib/api/product/updateProduct";
+import type { PageSummary } from "@/types/page";
 import type { Plan, Product } from "@/types/product";
 import type { Storefront } from "@/types/storefront";
 import Modal from "../modal";
+import type { PageFormValue } from "../pageForm";
 import SettingsTabs from "../settingsTabs";
 import PlanForm from "./planForm";
 import ProductForm, { type ProductFormValue } from "./productForm";
@@ -21,12 +24,17 @@ type PlanModal = { productId: number; planId?: number };
 export default function ProductManager({
     storefront,
     products,
+    pages,
 }: {
     storefront: Storefront;
     products: Product[];
+    // the product pages, one per product — they are left out of
+    // storefront.pages, which is what the navbar and settings list read
+    pages: PageSummary[];
 }) {
     const [productModal, setProductModal] = useState<ProductModal | null>(null);
     const [planModal, setPlanModal] = useState<PlanModal | null>(null);
+    const [renamingPageId, setRenamingPageId] = useState<number | null>(null);
     const [pending, setPending] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -83,10 +91,18 @@ export default function ProductManager({
         return saved;
     };
 
+    // The page belongs to the product, so it is renamed through the page
+    // endpoint like any other page — only the control lives here.
+    const handlePageRename = async (page: PageSummary, value: PageFormValue) => {
+        const saved = await run(() => updatePage(storefront.slug, page.slug, value));
+        if (saved) setRenamingPageId(null);
+        return saved;
+    };
+
     const handleProductDelete = async (product: Product) => {
         if (
             !window.confirm(
-                `Delete "${product.name}"? Any block showing it will render empty. This can't be undone.`,
+                `Delete "${product.name}"? Its page goes with it, and any block showing it will render empty. This can't be undone.`,
             )
         ) {
             return;
@@ -119,10 +135,21 @@ export default function ProductManager({
                 </p>
             ) : (
                 <ul className="flex flex-col divide-y divide-stone-200 rounded-lg border border-stone-200">
-                    {products.map((product) => (
+                    {products.map((product) => {
+                        const page = pages.find((entry) => entry.product === product.id);
+                        return (
                         <ProductRow
                             key={product.id}
                             product={product}
+                            page={page}
+                            storefrontSlug={storefront.slug}
+                            renamingPage={page !== undefined && renamingPageId === page.id}
+                            onRenamePage={() => page && setRenamingPageId(page.id)}
+                            onCancelRenamePage={() => setRenamingPageId(null)}
+                            onSavePage={(value) =>
+                                page ? handlePageRename(page, value) : Promise.resolve(false)
+                            }
+                            onError={setError}
                             pending={pending}
                             onEdit={() => setProductModal({ mode: "edit", productId: product.id })}
                             onDelete={() => handleProductDelete(product)}
@@ -132,7 +159,8 @@ export default function ProductManager({
                             }
                             onDeletePlan={(plan) => handlePlanDelete(product, plan)}
                         />
-                    ))}
+                        );
+                    })}
                 </ul>
             )}
 

@@ -95,7 +95,17 @@ def validate_page_block_content(value: dict, kind: str, storefront):
         missing = requested - found
         if missing:
             raise ValidationError({"slideshow_ids": f"Media not found: {sorted(missing)}"})
-        
+    if kind == 'link':
+        # imported here rather than at module scope: store.models imports this module
+        from store.models import Page
+
+        if not Page.objects.filter(pk=value['page_id'], storefront=storefront).exists():
+            raise ValidationError({"page_id": "Page not found"})
+        media_id = value.get('media_id')
+        if media_id is not None and not Blob.objects.filter(pk=media_id, uploader=storefront.owner).exists():
+            raise ValidationError({"media_id": "Media not found"})
+
+
 
 
 def rect_overlap(a, b):

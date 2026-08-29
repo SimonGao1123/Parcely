@@ -6,7 +6,7 @@ import { createPageBlock } from "@/lib/api/page/createPageBlock";
 import { deletePageBlock } from "@/lib/api/page/deletePageBlock";
 import { updatePageBlock } from "@/lib/api/page/updatePageBlock";
 import type { BlockPosition, PageBlock } from "@/types/block";
-import type { Page } from "@/types/page";
+import type { Page, PageSummary } from "@/types/page";
 import type { Product } from "@/types/product";
 import type { Storefront } from "@/types/storefront";
 import Block from "../pageblock/block";
@@ -64,12 +64,15 @@ export default function PageEditor({
     page,
     storefront,
     products,
+    pages,
     chrome,
 }: {
     page: Page;
     storefront: Storefront;
     // the whole catalogue, so the block modal's product picker never loads
     products: Product[];
+    // every page of the storefront, for the link block's page picker
+    pages: PageSummary[];
     // The real navbar and header, rendered on the server by the route so they
     // stay out of the client bundle.
     chrome?: React.ReactNode;
@@ -333,7 +336,7 @@ export default function PageEditor({
                     style={{ ...rowTrack, gridAutoRows: CELL, ...CELL_GUIDES }}
                 >
                     {blocks.map((block) => (
-                        <Block key={block.id} block={block} />
+                        <Block key={block.id} block={block} storefrontSlug={storefront.slug} />
                     ))}
                 </div>
 
@@ -403,6 +406,7 @@ export default function PageEditor({
                     key={modal.mode === "edit" ? `edit-${modal.blockId}` : "create"}
                     block={editingBlock}
                     products={products}
+                    pages={pages}
                     storefrontSlug={storefront.slug}
                     pending={pending}
                     onSubmit={handleModalSubmit}

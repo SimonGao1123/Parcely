@@ -69,6 +69,18 @@ class TextBlockContent(BaseModel):
     model_config = ConfigDict(extra='forbid')
     text: str
 
+class LinkBlockContent(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    page_id: int # the page navigated to; its slug is resolved at read time
+    media_id: Optional[int] = None
+    text: Optional[str] = None
+
+    @model_validator(mode="after")
+    def check_has_body(self) -> Self:
+        if self.media_id is None and not (self.text or "").strip():
+            raise ValueError("A link needs media, text, or both")
+        return self
+
 
 CONTENT_SCHEMAS: dict[str, type[BaseModel]] = {
     "media": MediaBlockContent,
@@ -76,4 +88,5 @@ CONTENT_SCHEMAS: dict[str, type[BaseModel]] = {
     "gallery": GalleryBlockContent,
     "slideshow": SlideshowBlockContent,
     "text": TextBlockContent,
+    "link": LinkBlockContent,
 }

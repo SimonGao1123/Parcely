@@ -1,9 +1,12 @@
 'use client';
 
 import Image from "next/image";
+import Link from "next/link";
 import Button from "@/components/button";
 import { formatPrice, planLabel } from "@/lib/price";
+import type { PageSummary } from "@/types/page";
 import type { Plan, Product } from "@/types/product";
+import PageForm, { type PageFormValue } from "../pageForm";
 
 function Pill({ children, tone }: { children: React.ReactNode; tone: "neutral" | "warn" }) {
     const colors = tone === "warn" ? "bg-amber-100 text-amber-800" : "bg-stone-100 text-stone-600";
@@ -16,17 +19,33 @@ function Pill({ children, tone }: { children: React.ReactNode; tone: "neutral" |
 
 export default function ProductRow({
     product,
+    page,
+    storefrontSlug,
+    renamingPage,
     pending,
     onEdit,
     onDelete,
+    onRenamePage,
+    onCancelRenamePage,
+    onSavePage,
+    onError,
     onAddPlan,
     onEditPlan,
     onDeletePlan,
 }: {
     product: Product;
+    // every product gets one when it is created; absent only for a product
+    // whose page was somehow removed out from under it
+    page: PageSummary | undefined;
+    storefrontSlug: string;
+    renamingPage: boolean;
     pending: boolean;
     onEdit: () => void;
     onDelete: () => void;
+    onRenamePage: () => void;
+    onCancelRenamePage: () => void;
+    onSavePage: (value: PageFormValue) => Promise<boolean>;
+    onError: (message: string) => void;
     onAddPlan: () => void;
     onEditPlan: (plan: Plan) => void;
     onDeletePlan: (plan: Plan) => void;
@@ -68,6 +87,43 @@ export default function ProductRow({
                     Delete
                 </Button>
             </div>
+
+            {/* The product's own page. Editing its blocks uses the same editor
+                as any other page — this is only the way in. It has no delete
+                control: the page dies with the product. */}
+            {page && (
+                <div className="flex items-center gap-3 border-l-2 border-stone-100 pl-4">
+                    {renamingPage ? (
+                        <PageForm
+                            initialTitle={page.title}
+                            existingLogoUrl={page.logo_image?.url}
+                            submitLabel="Save"
+                            pending={pending}
+                            onSubmit={onSavePage}
+                            onError={onError}
+                            onCancel={onCancelRenamePage}
+                        />
+                    ) : (
+                        <>
+                            <span className="text-[11px] font-semibold tracking-wider text-stone-400">
+                                PAGE
+                            </span>
+                            <span className="flex-1 text-sm text-stone-800">{page.title}</span>
+
+                            <Link
+                                href={`/${storefrontSlug}/${page.slug}/edit`}
+                                className="text-sm text-stone-500 underline hover:text-stone-800"
+                            >
+                                Edit blocks
+                            </Link>
+
+                            <Button variant="link" onClick={onRenamePage}>
+                                Rename
+                            </Button>
+                        </>
+                    )}
+                </div>
+            )}
 
             <div className="flex flex-col gap-2 border-l-2 border-stone-100 pl-4">
                 {product.plans.length === 0 ? (

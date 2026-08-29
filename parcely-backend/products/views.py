@@ -1,9 +1,11 @@
+from django.db import transaction
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from rest_framework import generics
 
 from products.models import Product, Plan
 from products.serializers import ProductSummarySerializer, PlanSerializer
+from products.services import create_product_page
 from store.models import StoreFront
 
 
@@ -40,13 +42,16 @@ class ProductListCreateAPIView(generics.ListCreateAPIView):
             )
         )
 
+    # atomic so a product can never exist without the page that displays it
+    @transaction.atomic
     def perform_create(self, serializer):
         storefront = get_object_or_404(
             StoreFront,
             slug=self.kwargs['storefront_slug'],
             owner=self.request.user,
         )
-        serializer.save(storefront=storefront)
+        product = serializer.save(storefront=storefront)
+        create_product_page(product)
 
 
 class ProductUpdateAPIView(generics.UpdateAPIView):

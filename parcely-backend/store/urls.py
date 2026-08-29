@@ -6,7 +6,7 @@ from store.views import (
     UpdateStoreFrontAPIView, 
     DeleteStoreFrontAPIView,
 )
-from store.views.page import PageDetailAPIView, CreatePageAPIView, UpdatePageAPIView, DeletePageAPIView
+from store.views.page import PageListAPIView, PageDetailAPIView, CreatePageAPIView, UpdatePageAPIView, DeletePageAPIView
 from store.views.pageblock import PageBlockCreateAPIView, PageBlockUpdateAPIView, PageBlockDeleteAPIView, PageBlockLayoutAPIView
 from products import urls as products_urls
 urlpatterns = [
@@ -18,6 +18,7 @@ urlpatterns = [
     path('<str:slug>/delete/', DeleteStoreFrontAPIView.as_view(), name='delete-store-front'),
 
     # page related urls
+    path('<str:storefront_slug>/pages/', PageListAPIView.as_view(), name='list-pages'),
     path('<str:storefront_slug>/pages/create/', CreatePageAPIView.as_view(), name='create-page'),
     path('<str:storefront_slug>/pages/<str:slug>/details/', PageDetailAPIView.as_view(), name='page-detail'),
     path('<str:storefront_slug>/pages/<str:slug>/update/', UpdatePageAPIView.as_view(), name='update-page'),

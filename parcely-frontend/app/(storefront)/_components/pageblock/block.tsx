@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { PageBlock } from "@/types/block";
 import { blockLayoutVars, blockStyleVars } from "./blockStyle";
 import GalleryBlock from "./blocks/galleryBlock";
+import LinkBlock from "./blocks/linkBlock";
 import MediaBlock from "./blocks/mediaBlock";
 import ProductBlock from "./blocks/productBlock";
 import SlideshowBlock from "./blocks/slideshowBlock";
@@ -11,7 +12,7 @@ import TextBlock from "./blocks/textBlock";
 // component into a variable during render trips react-hooks/static-components.
 // The switch also narrows the PageBlock union, so each branch gets the right
 // resolved_content type without a cast.
-function BlockContent({ block }: { block: PageBlock }) {
+function BlockContent({ block, storefrontSlug }: { block: PageBlock; storefrontSlug: string }) {
     switch (block.kind) {
         case "text":
             return <TextBlock block={block} />;
@@ -23,10 +24,18 @@ function BlockContent({ block }: { block: PageBlock }) {
             return <SlideshowBlock block={block} />;
         case "product":
             return <ProductBlock block={block} />;
+        case "link":
+            return <LinkBlock block={block} storefrontSlug={storefrontSlug} />;
     }
 }
 
-export default function Block({ block }: { block: PageBlock }) {
+export default function Block({
+    block,
+    storefrontSlug,
+}: {
+    block: PageBlock;
+    storefrontSlug: string;
+}) {
     const { alignment, padding } = block.style;
 
     const style: CSSProperties = {
@@ -47,7 +56,7 @@ export default function Block({ block }: { block: PageBlock }) {
             style={style}
             className="page-block bg-[var(--sf-bg)] font-[family-name:var(--sf-font)] text-[var(--sf-fg)]"
         >
-            <BlockContent block={block} />
+            <BlockContent block={block} storefrontSlug={storefrontSlug} />
         </div>
     );
 }

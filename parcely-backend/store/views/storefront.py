@@ -20,9 +20,13 @@ SUMMARY_SELECT_RELATED = (
 
 # Full detail also lists `pages` (reverse FK). Prefetch pages with their logo_image
 # pre-joined so PageSummarySerializer doesn't trigger N+1.
+#
+# Product pages are excluded here rather than at each call site: this array feeds
+# every themed navbar and the settings page list, and neither should show them.
+# Callers that need every page (the link block's page picker) use PageListAPIView.
 PAGES_PREFETCH = Prefetch(
     "pages",
-    queryset=Page.objects.select_related("logo_image"),
+    queryset=Page.objects.select_related("logo_image").filter(product__isnull=True),
 )
 
 
