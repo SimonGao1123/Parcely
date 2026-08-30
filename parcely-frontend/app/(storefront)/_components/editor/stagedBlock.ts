@@ -24,38 +24,27 @@ export const KIND_LABELS: Record<DraftKind, string> = {
     link: "Link",
 };
 
-// A block composed in the modal but not yet created. It has no id because it
-// has no position yet — dropping it on the grid is what supplies both, in the
-// same request.
+export type Uploader = (file: File) => Promise<number>;
+
+// A block composed in the modal but not yet created.
 //
-// draft is nested rather than spread in so that `key` and `span`, which are
-// local bookkeeping, can't leak into the create payload.
-export type StagedBlock = {
-    // local only, for the React key and for discarding the right chip
-    key: string;
-    draft: BlockDraft;
+// build is deferred rather than a finished draft because turning the picked
+// files into blob ids means uploading them, and an upload can't be undone: a
+// chip that is discarded, or left behind when the page is closed, would leave
+// blobs in the bucket that nothing references. Running it at the drop is what
+// makes staging free.
+export type BlockRecipe = {
+    kind: DraftKind;
+    // for the chip, since there is no draft to derive it from yet
+    summary: string;
+    build: (upload: Uploader) => Promise<BlockDraft>;
     style: PageBlockStyle;
-    span: BlockSpan;
 };
 
-export function draftSummary(draft: BlockDraft): string {
-    switch (draft.kind) {
-        case "text": {
-            const text = draft.content.text.trim();
-            return text.length > 40 ? `${text.slice(0, 40)}…` : text;
-        }
-        case "media":
-            return "1 file";
-        // the chip is only alive between Add and the drop, so an id is enough
-        // to tell two staged products apart
-        case "product":
-            return `#${draft.content.product_id}`;
-        case "gallery":
-            return `${draft.content.gallery_ids.length} items`;
-        case "slideshow":
-            return `${draft.content.slideshow_ids.length} items`;
-        // the text when there is one, otherwise the target it points at
-        case "link":
-            return draft.content.text?.trim() || `→ #${draft.content.page_id}`;
-    }
-}
+// It has no id because it has no position yet — dropping it on the grid is what
+// supplies both, in the same request.
+export type StagedBlock = BlockRecipe & {
+    // local only, for the React key and for discarding the right chip
+    key: string;
+    span: BlockSpan;
+};

@@ -13,11 +13,15 @@ import MediaListPicker, { type ExistingMedia } from "./mediaListPicker";
 import Modal from "./modal";
 import PagePicker from "./pagePicker";
 import ProductPicker from "./product/productPicker";
-import { KIND_LABELS } from "./stagedBlock";
+import { KIND_LABELS, type BlockRecipe, type Uploader } from "./stagedBlock";
 
 const KINDS: DraftKind[] = ["text", "media", "product", "gallery", "slideshow", "link"];
 
-export type BlockSubmit = { draft: BlockDraft; style: PageBlockStyle };
+export type BlockSubmit =
+    // resolved already: an edit is written the moment it is submitted
+    | { mode: "edit"; draft: BlockDraft; style: PageBlockStyle }
+    // nothing uploaded yet — the caller runs the recipe when the block is dropped
+    | { mode: "stage"; recipe: BlockRecipe };
 
 function initialKind(block: PageBlock | undefined): DraftKind {
     return block?.kind ?? "text";
@@ -98,7 +102,8 @@ export default function BlockModal({
     const [existingList, setExistingList] = useState<ExistingMedia[]>(() => initialList(block));
 
     // Confirmed blobs are permanent, so a failed submit must not upload a second
-    // copy on retry. Same cache as pageForm and storefrontSettings.
+    // copy on retry. Same cache as pageForm and storefrontSettings. Only the
+    // edit flow reaches it; staging defers to the editor's uploader.
     const blobIds = useRef(new Map<File, number>());
 
     const uploadOnce = async (file: File) => {
@@ -144,12 +149,37 @@ export default function BlockModal({
         }
     })();
 
-    const buildDraft = async (): Promise<BlockDraft> => {
+    // Shown on the sidebar chip, computed here because a staged block has no
+    // draft to derive it from until it is dropped.
+    const summary = (() => {
+        switch (kind) {
+            case "text": {
+                const value = text.trim();
+                return value.length > 40 ? `${value.slice(0, 40)}…` : value;
+            }
+            case "media":
+                return "1 file";
+            // the chip is only alive between Add and the drop, so an id is
+            // enough to tell two staged products apart
+            case "product":
+                return `#${productId}`;
+            case "gallery":
+            case "slideshow":
+                return `${listCount} items`;
+            // the text when there is one, otherwise the target it points at
+            case "link":
+                return linkText.trim() || `→ #${pageId}`;
+        }
+    })();
+
+    // Takes its uploader rather than closing over one: when staging, this runs
+    // after the modal is gone, against the editor's uploader instead.
+    const buildDraft = async (upload: Uploader): Promise<BlockDraft> => {
         switch (kind) {
             case "text":
                 return { kind: "text", content: { text: text.trim() } };
             case "media": {
-                const id = mediaFile ? await uploadOnce(mediaFile) : existingMediaId;
+                const id = mediaFile ? await upload(mediaFile) : existingMediaId;
                 return { kind: "media", content: { media_id: id as number } };
             }
             case "product":
@@ -159,13 +189,13 @@ export default function BlockModal({
                 // every id still on the block, then the newly staged ones — the
                 // order shown in the picker
                 const ids = existingList.map((item) => item.id);
-                for (const file of listFiles) ids.push(await uploadOnce(file));
+                for (const file of listFiles) ids.push(await upload(file));
                 return kind === "gallery"
                     ? { kind: "gallery", content: { gallery_ids: ids } }
                     : { kind: "slideshow", content: { slideshow_ids: ids } };
             }
             case "link": {
-                const mediaId = linkFile ? await uploadOnce(linkFile) : linkMediaId;
+                const mediaId = linkFile ? await upload(linkFile) : linkMediaId;
                 const text = linkText.trim();
                 return {
                     kind: "link",
@@ -185,15 +215,26 @@ export default function BlockModal({
 
         setError(null);
 
+        // Staging uploads nothing: the files ride along in the recipe and are
+        // only sent once the block lands on the grid.
+        if (!editing) {
+            const accepted = await onSubmit({
+                mode: "stage",
+                recipe: { kind, summary, build: buildDraft, style },
+            });
+            if (accepted) onClose();
+            return;
+        }
+
         let draft: BlockDraft;
         try {
-            draft = await buildDraft();
+            draft = await buildDraft(uploadOnce);
         } catch (uploadError) {
             setError(uploadError instanceof Error ? uploadError.message : String(uploadError));
             return;
         }
 
-        if (await onSubmit({ draft, style })) onClose();
+        if (await onSubmit({ mode: "edit", draft, style })) onClose();
     };
 
     const busy = pending || uploading;

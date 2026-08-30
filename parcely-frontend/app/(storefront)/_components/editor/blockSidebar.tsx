@@ -2,7 +2,7 @@
 
 import type { PointerEvent } from "react";
 import Button from "@/components/button";
-import { draftSummary, KIND_LABELS, type StagedBlock } from "./stagedBlock";
+import { KIND_LABELS, type StagedBlock } from "./stagedBlock";
 
 // Must be rendered as a sibling of the grid wrapper, never inside it: the
 // wrapper sets container-type: inline-size, which implies layout containment and
@@ -43,7 +43,9 @@ export default function BlockSidebar({
             }`}
         >
             <div
-                className={`flex h-full w-64 flex-col gap-3 overflow-y-auto p-4 transition-opacity duration-200 ${
+                // pt clears the editor toolbar: the rail is fixed from the top
+                // of the viewport, so without it the header sits under the strip
+                className={`flex h-full w-64 flex-col gap-3 overflow-y-auto p-4 pt-16 transition-opacity duration-200 ${
                     dragging ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                 }`}
             >
@@ -77,16 +79,16 @@ export default function BlockSidebar({
                         >
                             <span className="flex-1 overflow-hidden">
                                 <span className="block text-sm font-medium text-stone-800">
-                                    {KIND_LABELS[block.draft.kind]}
+                                    {KIND_LABELS[block.kind]}
                                 </span>
                                 <span className="block truncate text-xs text-stone-500">
-                                    {draftSummary(block.draft)}
+                                    {block.summary}
                                 </span>
                             </span>
 
                             <Button
                                 variant="unstyled"
-                                aria-label={`Discard ${KIND_LABELS[block.draft.kind]} block`}
+                                aria-label={`Discard ${KIND_LABELS[block.kind]} block`}
                                 // or pressing it would start a drag instead
                                 onPointerDown={(event) => event.stopPropagation()}
                                 onClick={() => onDiscard(block.key)}

@@ -5,7 +5,8 @@ import Button from "@/components/button";
 import { createPageBlock } from "@/lib/api/page/createPageBlock";
 import { deletePageBlock } from "@/lib/api/page/deletePageBlock";
 import { updatePageBlock } from "@/lib/api/page/updatePageBlock";
-import type { BlockPosition, PageBlock } from "@/types/block";
+import { useUploadFile } from "@/lib/api/s3/uploadFile";
+import type { BlockDraft, BlockPosition, PageBlock } from "@/types/block";
 import type { Page, PageSummary } from "@/types/page";
 import type { Product } from "@/types/product";
 import type { Storefront } from "@/types/storefront";
@@ -91,6 +92,21 @@ export default function PageEditor({
     // read in the pointerup handler, which has no access to the latest ghost
     // state — the setter is queued, not applied, by the time the drop lands
     const ghostRef = useRef<{ position: BlockPosition; valid: boolean } | null>(null);
+
+    // The staged block's files are uploaded here, at the drop, rather than when
+    // the modal composed it — a chip that is discarded or never dropped should
+    // not leave blobs behind. Cached because a drop that fails leaves the chip
+    // in place to be dragged again, and confirmed blobs are permanent.
+    const { upload } = useUploadFile();
+    const blobIds = useRef(new Map<File, number>());
+
+    const uploadOnce = async (file: File) => {
+        const cached = blobIds.current.get(file);
+        if (cached !== undefined) return cached;
+        const id = await upload(file);
+        blobIds.current.set(file, id);
+        return id;
+    };
 
     const { status, retry } = useLayoutAutosave(storefront.slug, page.slug, blocks);
 
@@ -215,8 +231,18 @@ export default function PageEditor({
 
         setError(null);
         setPending(true);
+
+        let draft: BlockDraft;
+        try {
+            draft = await block.build(uploadOnce);
+        } catch (uploadError) {
+            setPending(false);
+            setError(uploadError instanceof Error ? uploadError.message : String(uploadError));
+            return;
+        }
+
         const result = await createPageBlock(storefront.slug, page.slug, {
-            ...block.draft,
+            ...draft,
             layout: { desktop: drop.position, tablet: null, mobile: null },
             style: block.style,
         });
@@ -230,11 +256,15 @@ export default function PageEditor({
         setStaged((current) => current.filter((entry) => entry.key !== block.key));
     }
 
-    async function handleModalSubmit({ draft, style }: BlockSubmit): Promise<boolean> {
-        if (modal?.mode === "create") {
+    async function handleModalSubmit(value: BlockSubmit): Promise<boolean> {
+        if (value.mode === "stage") {
             setStaged((current) => [
                 ...current,
-                { key: crypto.randomUUID(), draft, style, span: DEFAULT_SPANS[draft.kind] },
+                {
+                    ...value.recipe,
+                    key: crypto.randomUUID(),
+                    span: DEFAULT_SPANS[value.recipe.kind],
+                },
             ]);
             return true;
         }
@@ -243,8 +273,8 @@ export default function PageEditor({
         setError(null);
         setPending(true);
         const result = await updatePageBlock(storefront.slug, page.slug, modal.blockId, {
-            content: draft.content,
-            style,
+            content: value.draft.content,
+            style: value.style,
         });
         setPending(false);
 
