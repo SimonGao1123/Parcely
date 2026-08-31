@@ -41,8 +41,8 @@ class Cart(TimestampedModel):
         if bool(self.user_id) == bool(self.public_session_id):
             raise ValidationError("A cart must have either a user or a public session id, not both")
 
-        if self.user and self.user == self.storefront.owner:
-            raise ValidationError("A cart cannot be owned by the storefront owner")
+        # if self.user and self.user == self.storefront.owner:
+        #     raise ValidationError("A cart cannot be owned by the storefront owner")
 
     def save(self, *args, **kwargs):
         self.full_clean()

@@ -139,3 +139,35 @@ class ClearCartAPIView(APIView):
         cart.items.all().delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
         
+class GetCartAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    @transaction.atomic
+    def get(self, request, *args, **kwargs):
+        storefront = get_object_or_404(
+            StoreFront.objects.filter(visible_storefront_q(request.user)),
+            slug=kwargs["storefront_slug"],
+        )
+        public_session_id = request.headers.get("X-Public-Cart-ID")
+        
+
+        token_cart = (
+            Cart.objects.filter(public_session_id=public_session_id, storefront=storefront).first()
+            if public_session_id
+            else None
+        )
+        user = request.user if request.user.is_authenticated else None
+        
+        if user is None:
+            return Response(CartSerializer(token_cart).data, status=status.HTTP_200_OK) if token_cart else Response(status=status.HTTP_204_NO_CONTENT)
+        
+        user_cart = Cart.objects.filter(user=user, storefront=storefront).first()
+
+        if token_cart is None:
+            return Response(CartSerializer(user_cart).data, status=status.HTTP_200_OK) if user_cart else Response(status=status.HTTP_204_NO_CONTENT)
+        
+        if user_cart is None:
+            # create a new cart for that user and merge, since we know token cart exists
+            user_cart = Cart.objects.create(user=user, storefront=storefront)
+        merge_carts(token_cart, user_cart)
+        return Response(CartSerializer(user_cart).data, status=status.HTTP_200_OK)
