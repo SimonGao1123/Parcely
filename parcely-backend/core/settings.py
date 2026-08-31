@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     's3',
     'store',
     'products',
+    'cart',
 ]
 
 REST_FRAMEWORK = {

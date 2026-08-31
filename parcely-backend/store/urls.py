@@ -9,6 +9,7 @@ from store.views import (
 from store.views.page import PageListAPIView, PageDetailAPIView, CreatePageAPIView, UpdatePageAPIView, DeletePageAPIView
 from store.views.pageblock import PageBlockCreateAPIView, PageBlockUpdateAPIView, PageBlockDeleteAPIView, PageBlockLayoutAPIView
 from products import urls as products_urls
+from cart import urls as cart_urls
 urlpatterns = [
     # storefront related urls
     path('', StoreFrontListCreateAPIView.as_view(), name='store-front-list-create'),
@@ -32,4 +33,7 @@ urlpatterns = [
 
     # product related urls
     path('<str:storefront_slug>/products/', include(products_urls)),
+
+    # cart related urls
+    path('<str:storefront_slug>/cart/', include(cart_urls)),
 ]

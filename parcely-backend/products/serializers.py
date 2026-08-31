@@ -53,3 +53,18 @@ class ProductSummarySerializer(serializers.ModelSerializer): # for display in pa
         model = Product
         fields = ['id', 'name', 'description', 'is_subscription', 'max_capacity', 'display_image', 'plans', 'storefront', 'currency', 'is_active', 'created_at', 'updated_at', 'display_image_id']
         read_only_fields = ['id', 'created_at', 'updated_at', 'storefront']
+
+class ProductCartItemSerializer(serializers.ModelSerializer):
+    display_image = BlobSerializer(read_only=True)
+    class Meta:
+        model = Product
+        fields = ['id', 'name', 'description', 'is_subscription', 'max_capacity', 'display_image', 'storefront', 'currency', 'is_active', 'created_at', 'updated_at', 'display_image_id']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'storefront']
+class PlanCartItemSerializer(serializers.ModelSerializer):
+    product = ProductCartItemSerializer(read_only = True)
+    # instead of going to products then plans, going from plan to product so ensure product serializer doesn't have circular ref to plans
+    # also don't need storefront since when we are serializing our cart we get storefront
+    class Meta:
+        model = Plan
+        fields = ['id', 'title', 'price_cents', 'product', 'billing_interval', 'billing_interval_count', 'trial_period_days']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'product']

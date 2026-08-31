@@ -19,10 +19,12 @@ from django.urls import path, include
 from accounts import urls as accounts_urls
 from accounts import views as accounts_views
 from store import urls as store_urls
+from cart import urls as cart_urls
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include(accounts_urls)),
     path('s3/', include('s3.urls')),
     path('clerk/webhook/', accounts_views.clerk_webhook, name='clerk_webhook'),
     path('storefronts/', include(store_urls)),
+    path('cart/', include(cart_urls)),
 ]

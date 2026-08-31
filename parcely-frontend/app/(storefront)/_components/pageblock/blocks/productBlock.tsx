@@ -141,7 +141,7 @@ function PlanRow({
     const suffix = planIntervalSuffix(plan);
     return (
         <Button
-            variant="unstyled"
+            variant="chip"
             aria-pressed={active}
             onClick={onSelect}
             className="flex w-full items-center justify-between gap-[0.75em] rounded-lg px-[0.85em] py-[0.65em] text-left text-[0.875em]"
