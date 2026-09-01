@@ -7,6 +7,11 @@ import type { BillingInterval, Currency, Plan } from "@/types/product";
 // app, so pinning costs nothing.
 const LOCALE = "en-US";
 
+// The three plan helpers below read only pricing fields, so they take a Plan
+// without its product: cart items carry a PlanCartSummary, whose product is the
+// object rather than an id and so is not assignable to Plan.
+type PlanPricing = Omit<Plan, "product">;
+
 const INTERVAL_SHORT: Record<BillingInterval, string> = {
     day: "day",
     week: "wk",
@@ -30,7 +35,7 @@ export function formatPrice(cents: number, currency: Currency): string {
 
 // Compact interval for the selected-plan headline and the right side of a plan
 // row: "mo", "12 mo". Null on a one-time plan, which has no interval to show.
-export function planIntervalSuffix(plan: Plan): string | null {
+export function planIntervalSuffix(plan: PlanPricing): string | null {
     if (!plan.billing_interval) return null;
     const count = plan.billing_interval_count ?? 1;
     const short = INTERVAL_SHORT[plan.billing_interval];
@@ -39,7 +44,7 @@ export function planIntervalSuffix(plan: Plan): string | null {
 
 // Left side of a plan row. title wins when set; otherwise the interval is
 // spelled out ("Monthly", "12 months") so the price can sit on the other side.
-export function planName(plan: Plan): string {
+export function planName(plan: PlanPricing): string {
     if (plan.title) return plan.title;
     if (!plan.billing_interval) return "One-time";
     const count = plan.billing_interval_count ?? 1;
@@ -50,7 +55,7 @@ export function planName(plan: Plan): string {
 // The label a plan wears on a button. title is free text and wins outright when
 // set; otherwise the price carries the interval, which is null on a one-time
 // product and required on a subscription.
-export function planLabel(plan: Plan, currency: Currency): string {
+export function planLabel(plan: PlanPricing, currency: Currency): string {
     if (plan.title) return plan.title;
 
     const price = formatPrice(plan.price_cents, currency);

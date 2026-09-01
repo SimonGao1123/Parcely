@@ -5,8 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ThemedNavbarProps } from "./types";
 import { AuthControl } from "@/components/authControl";
+import { CartLink } from "@/app/(storefront)/_components/carts/cartLink";
 
-export function TimelessNavbar({ storefront, pages }: ThemedNavbarProps) {
+export function TimelessNavbar({ storefront, pages, cartCount }: ThemedNavbarProps) {
     const { title, logo_image, banner_image } = storefront;
 
     return (
@@ -40,7 +41,12 @@ export function TimelessNavbar({ storefront, pages }: ThemedNavbarProps) {
                     </h1>
                 )}
 
-                <div className="absolute top-2 right-4 flex items-center">
+                <div className="absolute top-2 right-4 flex items-center gap-4">
+                    <CartLink
+                        slug={storefront.slug}
+                        count={cartCount}
+                        className="opacity-80 transition-opacity hover:opacity-100"
+                    />
                     <AuthControl className="text-xs uppercase tracking-[0.2em] opacity-80 transition-opacity hover:opacity-100" />
                 </div>
             </div>

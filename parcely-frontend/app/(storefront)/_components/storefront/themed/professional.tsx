@@ -5,8 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ThemedNavbarProps } from "./types";
 import { AuthControl } from "@/components/authControl";
+import { CartLink } from "@/app/(storefront)/_components/carts/cartLink";
 
-export function ProfessionalNavbar({ storefront, pages }: ThemedNavbarProps) {
+export function ProfessionalNavbar({ storefront, pages, cartCount }: ThemedNavbarProps) {
     const { title, logo_image, banner_image, slug } = storefront;
 
     return (
@@ -64,7 +65,12 @@ export function ProfessionalNavbar({ storefront, pages }: ThemedNavbarProps) {
                 </Link>
             ))}
 
-            <div className="relative ml-auto flex items-center">
+            <div className="relative ml-auto flex items-center gap-5">
+                <CartLink
+                    slug={slug}
+                    count={cartCount}
+                    className="opacity-80 transition-opacity hover:opacity-100"
+                />
                 <AuthControl className="text-sm uppercase tracking-[0.1em] opacity-80 transition-opacity hover:opacity-100" />
             </div>
         </nav>

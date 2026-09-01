@@ -6,6 +6,7 @@ import type { Storefront } from "@/types/storefront";
 export type ThemedNavbarProps = {
     storefront: Storefront;
     pages: PageSummary[]; // pre-ordered — homepage first
+    cartCount: number | null; // null on a draft storefront, which has no cart
 };
 
 export type ThemedHeaderProps = {

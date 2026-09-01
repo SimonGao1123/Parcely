@@ -1,5 +1,6 @@
 'use server'
 
+import { refresh } from 'next/cache';
 import { cookies } from 'next/headers';
 import {errorFrom} from '../formatErrors';
 import { apiFetch } from "../../api.server";
@@ -43,6 +44,11 @@ export const createCartItem = async (
             path: '/',
         });
     }
+
+    // Setting a cookie already re-renders, but only the first anonymous add gets
+    // an id back — every later add, and every signed-in one, needs this for the
+    // navbar badge to follow.
+    refresh();
 
     return cart;
 }

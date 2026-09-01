@@ -4,8 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ThemedHeaderProps, ThemedNavbarProps } from "./types";
 import { AuthControl } from "@/components/authControl";
+import { CartLink } from "@/app/(storefront)/_components/carts/cartLink";
 
-export function MinimalistNavbar({ storefront, pages }: ThemedNavbarProps) {
+export function MinimalistNavbar({ storefront, pages, cartCount }: ThemedNavbarProps) {
     const { title, logo_image, slug } = storefront;
 
     return (
@@ -44,6 +45,11 @@ export function MinimalistNavbar({ storefront, pages }: ThemedNavbarProps) {
                         )}
                     </Link>
                 ))}
+                <CartLink
+                    slug={slug}
+                    count={cartCount}
+                    className="opacity-70 transition-opacity hover:opacity-100"
+                />
                 <AuthControl className="text-sm opacity-70 transition-opacity hover:opacity-100" />
             </div>
         </nav>

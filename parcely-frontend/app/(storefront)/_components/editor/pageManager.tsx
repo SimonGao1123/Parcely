@@ -12,11 +12,11 @@ import type { Storefront } from "@/types/storefront";
 import { orderPages } from "../storefront/orderPages";
 import PageForm, { type PageFormValue } from "./pageForm";
 
-// /<storefrontSlug>/settings and /<storefrontSlug>/products are static routes,
-// so they win over the dynamic /<storefrontSlug>/<pageSlug>. A page slugged
-// either would still be created fine but its public URL would resolve to the
-// editor screen instead.
-const RESERVED_SLUGS = new Set(["settings", "products"]);
+// /<storefrontSlug>/settings, /products and /cart are static routes, so they win
+// over the dynamic /<storefrontSlug>/<pageSlug>. A page slugged any of them
+// would still be created fine but its public URL would resolve to that route
+// instead.
+const RESERVED_SLUGS = new Set(["settings", "products", "cart"]);
 
 // Approximates django.utils.text.slugify well enough to catch the collision
 // above. It does not have to match exactly — the backend remains authoritative
@@ -32,7 +32,7 @@ function slugify(title: string): string {
 
 function reservedError(title: string): string | null {
     return RESERVED_SLUGS.has(slugify(title))
-        ? `"${title}" is reserved — its URL is used by the editor. Pick another name.`
+        ? `"${title}" is reserved — its URL is already used by this storefront. Pick another name.`
         : null;
 }
 

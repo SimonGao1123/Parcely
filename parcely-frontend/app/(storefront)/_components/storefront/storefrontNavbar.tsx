@@ -8,7 +8,13 @@ import { useNavbarVisibility } from "@/components/useNavbarVisibility";
 import { orderPages } from "./orderPages";
 import { styleVars } from "./styleVars";
 
-export default function StorefrontNavbar({ storefront }: { storefront: Storefront }) {
+export default function StorefrontNavbar({
+    storefront,
+    cartCount,
+}: {
+    storefront: Storefront;
+    cartCount: number | null;
+}) {
     const visible = useNavbarVisibility();
 
     const pages = useMemo(() => orderPages(storefront), [storefront]);
@@ -43,8 +49,12 @@ export default function StorefrontNavbar({ storefront }: { storefront: Storefron
                 visible ? "translate-y-0" : "-translate-y-full"
             }`}
         >
-            
-            <ThemedNavbar theme={storefront.theme} storefront={storefront} pages={pages} />
+            <ThemedNavbar
+                theme={storefront.theme}
+                storefront={storefront}
+                pages={pages}
+                cartCount={cartCount}
+            />
         </div>
     );
 }

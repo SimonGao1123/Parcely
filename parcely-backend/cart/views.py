@@ -6,7 +6,6 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from store.access import visible_storefront_q
 from store.models import StoreFront
 
 from .models import Cart, CartItem
@@ -21,6 +20,13 @@ def _caller(request):
     )
 
 
+def _shoppable_storefront(kwargs):
+    # Narrower than visible_storefront_q, which also admits an owner's own
+    # drafts: a draft's products and prices can still change shape, so a cart
+    # built against one would not survive publication.
+    return get_object_or_404(StoreFront, slug=kwargs["storefront_slug"], is_draft=False)
+
+
 class CreateCartItemAPIView(APIView):
     # Shopping does not require an account; the cart token is the only identity.
     # Without this the project-wide IsClerkAuthenticated default would 403 every
@@ -29,10 +35,7 @@ class CreateCartItemAPIView(APIView):
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
-        storefront = get_object_or_404(
-            StoreFront.objects.filter(visible_storefront_q(request.user)),
-            slug=kwargs["storefront_slug"],
-        )
+        storefront = _shoppable_storefront(kwargs)
 
         serializer = CartItemSerializer(data=request.data, context={"storefront": storefront})
         serializer.is_valid(raise_exception=True)
@@ -127,10 +130,7 @@ class UpdateDeleteCartItemAPIView(APIView):
 
     @staticmethod
     def _owned_item(request, kwargs):
-        storefront = get_object_or_404(
-            StoreFront.objects.filter(visible_storefront_q(request.user)),
-            slug=kwargs["storefront_slug"],
-        )
+        storefront = _shoppable_storefront(kwargs)
         cart_item = get_object_or_404(
             CartItem.objects.select_related("cart", "plan__product").filter(cart__storefront=storefront),
             id=kwargs["cart_item_id"],
@@ -162,10 +162,7 @@ class ClearCartAPIView(APIView):
 
     @transaction.atomic
     def delete(self, request, *args, **kwargs):
-        storefront = get_object_or_404(
-            StoreFront.objects.filter(visible_storefront_q(request.user)),
-            slug=kwargs["storefront_slug"],
-        )
+        storefront = _shoppable_storefront(kwargs)
         user, token = _caller(request)
 
         # Resolved the same way as every other endpoint, so a shopper who added
@@ -185,10 +182,7 @@ class GetCartAPIView(APIView):
     # the rows it returns.
     @transaction.atomic
     def get(self, request, *args, **kwargs):
-        storefront = get_object_or_404(
-            StoreFront.objects.filter(visible_storefront_q(request.user)),
-            slug=kwargs["storefront_slug"],
-        )
+        storefront = _shoppable_storefront(kwargs)
         user, token = _caller(request)
 
         # Deliberately does not create: a page view, including a crawler's,

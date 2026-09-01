@@ -35,7 +35,14 @@ export default async function EditPage({ params }: PageProps<"/[storefrontSlug]/
             aria-hidden
             className="pointer-events-none select-none"
         >
-            <ThemedNavbar theme={storefront.theme} storefront={storefront} pages={orderPages(storefront)} />
+            {/* 0 rather than the owner's real count: this is a preview of the
+                chrome a shopper sees, and a draft shows them no cart at all */}
+            <ThemedNavbar
+                theme={storefront.theme}
+                storefront={storefront}
+                pages={orderPages(storefront)}
+                cartCount={storefront.is_draft ? null : 0}
+            />
             {/* matches the public page, which only renders the header on the
                 homepage. Returns null for the timeless and professional themes. */}
             {page.is_homepage && <ThemedHeader theme={storefront.theme} storefront={storefront} />}

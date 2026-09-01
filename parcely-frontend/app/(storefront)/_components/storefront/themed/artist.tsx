@@ -5,8 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ThemedHeaderProps, ThemedNavbarProps } from "./types";
 import { AuthControl } from "@/components/authControl";
+import { CartLink } from "@/app/(storefront)/_components/carts/cartLink";
 
-export function ArtistNavbar({ storefront, pages }: ThemedNavbarProps) {
+export function ArtistNavbar({ storefront, pages, cartCount }: ThemedNavbarProps) {
     return (
         <nav className="flex items-center gap-8 border-b border-current/15 bg-[var(--sf-bg)] px-6 py-3 font-[family-name:var(--sf-font)] text-[var(--sf-fg)]">
             {pages.map((page) => (
@@ -30,7 +31,12 @@ export function ArtistNavbar({ storefront, pages }: ThemedNavbarProps) {
                 </Link>
             ))}
 
-            <div className="ml-auto flex items-center">
+            <div className="ml-auto flex items-center gap-5">
+                <CartLink
+                    slug={storefront.slug}
+                    count={cartCount}
+                    className="opacity-80 transition-opacity hover:opacity-100"
+                />
                 <AuthControl className="text-sm uppercase tracking-[0.15em] opacity-80 transition-opacity hover:opacity-100" />
             </div>
         </nav>
