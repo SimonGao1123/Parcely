@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from "react";
+import AddToCartButton from "@/app/(storefront)/_components/carts/addToCartButton";
 import Button from "@/components/button";
 import { formatPrice, planIntervalSuffix, planName } from "@/lib/price";
 import type { ProductBlock as ProductBlockData } from "@/types/block";
@@ -8,12 +9,17 @@ import type { Currency, Plan } from "@/types/product";
 import { objectPositionClass } from "./alignment";
 import BlobMedia from "./blobMedia";
 
-export default function ProductBlock({ block }: { block: ProductBlockData }) {
+export default function ProductBlock({
+    block,
+    storefrontSlug,
+}: {
+    block: ProductBlockData;
+    storefrontSlug: string;
+}) {
     const product = block.resolved_content;
 
-    // Selecting a plan is the only thing these buttons do — there is no
-    // checkout behind them yet. The hooks run before the null check because
-    // they can't be skipped on a render where the product failed to resolve.
+    // The hooks run before the null check because they can't be skipped on a
+    // render where the product failed to resolve.
     const [selectedPlan, setSelectedPlan] = useState<number | null>(
         product?.plans[0]?.id ?? null,
     );
@@ -103,13 +109,13 @@ export default function ProductBlock({ block }: { block: ProductBlockData }) {
                     )}
 
                     {plan && (
-                        <Button
-                            variant="unstyled"
-                            className="w-full rounded-lg px-[0.85em] py-[0.7em] text-[0.95em] font-medium"
-                            style={{ background: "var(--sf-fg)", color: "var(--sf-bg)" }}
-                        >
-                            Add to cart
-                        </Button>
+                        <AddToCartButton
+                            storefrontSlug={storefrontSlug}
+                            planId={plan.id}
+                            // Subscriptions are one unit only, so the quantity
+                            // input above isn't rendered for them.
+                            quantity={product.is_subscription ? 1 : quantity}
+                        />
                     )}
                 </div>
             </div>

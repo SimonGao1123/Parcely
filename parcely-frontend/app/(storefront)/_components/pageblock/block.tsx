@@ -23,7 +23,7 @@ function BlockContent({ block, storefrontSlug }: { block: PageBlock; storefrontS
         case "slideshow":
             return <SlideshowBlock block={block} />;
         case "product":
-            return <ProductBlock block={block} />;
+            return <ProductBlock block={block} storefrontSlug={storefrontSlug} />;
         case "link":
             return <LinkBlock block={block} storefrontSlug={storefrontSlug} />;
     }

@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import AllowAny
@@ -10,7 +11,14 @@ from store.models import StoreFront
 
 from .models import Cart, CartItem
 from .serializers import CartItemSerializer, CartSerializer
-from .services import generate_public_session_id, merge_carts
+from .services import find_cart, generate_public_session_id, is_adoptable_token
+
+
+def _caller(request):
+    return (
+        request.user if request.user.is_authenticated else None,
+        request.headers.get("X-Public-Cart-ID"),
+    )
 
 
 class CreateCartItemAPIView(APIView):
@@ -51,123 +59,142 @@ class CreateCartItemAPIView(APIView):
 
     @staticmethod
     def _resolve_cart(request, storefront):
-        # The header is a lookup key only. An unrecognised token gets a fresh
-        # server-minted one rather than being adopted: letting the caller name its
-        # own cart would let it pick a guessable id and hand out access.
-        token = request.headers.get("X-Public-Cart-ID")
-        user = request.user if request.user.is_authenticated else None
+        user, token = _caller(request)
 
-        # Looked up separately rather than as one OR: a signed-in shopper carrying
-        # a token has two distinct carts, and a single query would return an
-        # arbitrary one of them.
-        token_cart = (
-            Cart.objects.select_for_update().filter(storefront=storefront, public_session_id=token).first()
-            if token
-            else None
-        )
+        cart = find_cart(storefront, user, token)
+        if cart is not None:
+            return cart
 
-        if user is None:
-            return token_cart or Cart.objects.create(
-                storefront=storefront, public_session_id=generate_public_session_id()
-            )
+        # get_or_create rather than create: select_for_update cannot lock a row
+        # that does not exist yet, so two simultaneous first adds would otherwise
+        # race each other into the unique constraint.
+        if user is not None:
+            cart, _ = Cart.objects.get_or_create(storefront=storefront, user=user)
+            return cart
 
-        user_cart = Cart.objects.select_for_update().filter(storefront=storefront, user=user).first()
-
-        if token_cart is None:
-            return user_cart or Cart.objects.create(storefront=storefront, user=user)
-
-        if user_cart is None:
-            # Claim rather than merge: nothing to merge into, so the anonymous
-            # cart just changes owner and loses its token.
-            token_cart.user = user
-            token_cart.public_session_id = None
-            token_cart.save()
-            return token_cart
-
-        merge_carts(token_cart, user_cart)
-        return user_cart
+        # A session id the server minted keys a new cart at this storefront —
+        # that is how one session spans storefronts. Anything else, including a
+        # token whose carts have all expired, starts a new session.
+        session_id = token if is_adoptable_token(token) else generate_public_session_id()
+        cart, _ = Cart.objects.get_or_create(storefront=storefront, public_session_id=session_id)
+        return cart
 
 
 class UpdateDeleteCartItemAPIView(APIView):
     """
-    Can only edit quantity, can delete item by writing quantity of 0 (2 in one)
+    Can only edit quantity. A quantity of 0 removes the item, so the client can
+    decrement to nothing without a second endpoint.
     """
     permission_classes = [AllowAny]
 
     @transaction.atomic
     def patch(self, request, *args, **kwargs):
-        if not request.data.get("quantity"):
-            return Response({"error": "Quantity is required"}, status=status.HTTP_400_BAD_REQUEST)
+        storefront, cart_item = self._owned_item(request, kwargs)
+
+        quantity = request.data.get("quantity")
+        if quantity is None:
+            return Response({"quantity": "This field is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            quantity = int(quantity)
+        except (TypeError, ValueError):
+            return Response({"quantity": "Must be a whole number."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Handled before the serializer because zero is a delete signal here, not
+        # a quantity — the model's minimum of one would reject it.
+        if quantity == 0:
+            cart_item.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        # Through the serializer rather than a direct save so the subscription
+        # rule comes back as a 400 naming the field. Model validation raises
+        # Django's ValidationError, which DRF does not translate, so saving
+        # directly turns a bad quantity into a 500.
+        serializer = CartItemSerializer(
+            cart_item,
+            data={"quantity": quantity},
+            partial=True,
+            context={"storefront": storefront},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def delete(self, request, *args, **kwargs):
+        _, cart_item = self._owned_item(request, kwargs)
+        cart_item.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @staticmethod
+    def _owned_item(request, kwargs):
         storefront = get_object_or_404(
             StoreFront.objects.filter(visible_storefront_q(request.user)),
             slug=kwargs["storefront_slug"],
         )
         cart_item = get_object_or_404(
-            CartItem.objects.filter(cart__storefront=storefront),
+            CartItem.objects.select_related("cart", "plan__product").filter(cart__storefront=storefront),
             id=kwargs["cart_item_id"],
         )
-        # ONLY can edit quantity, can delete item by writing quantity of 0 (2 in one)
-        if request.data.get("quantity") == 0:
-            cart_item.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        cart_item.quantity = request.data.get("quantity")
-        cart_item.save()
-        return Response(CartItemSerializer(cart_item).data, status=status.HTTP_200_OK)
+
+        cart = cart_item.cart
+        token = request.headers.get("X-Public-Cart-ID")
+
+        if cart.user_id is not None:
+            owned = request.user.is_authenticated and cart.user_id == request.user.id
+        elif cart.public_session_id:
+            owned = bool(token) and cart.public_session_id == token
+        else:
+            # Unreachable through save(), which enforces one owner or the other,
+            # but a queryset .update() skips full_clean. An ownerless cart
+            # belongs to nobody rather than to everybody.
+            owned = False
+
+        if not owned:
+            # 404 over 403: whether this id names a row on someone else's cart is
+            # not the caller's business.
+            raise Http404
+
+        return storefront, cart_item
+
 
 class ClearCartAPIView(APIView):
     permission_classes = [AllowAny]
+
     @transaction.atomic
     def delete(self, request, *args, **kwargs):
         storefront = get_object_or_404(
             StoreFront.objects.filter(visible_storefront_q(request.user)),
             slug=kwargs["storefront_slug"],
         )
-        public_session_id = request.headers.get("X-Public-Cart-ID")
-        if not request.user.is_authenticated and not public_session_id:
-            return Response({"error": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
-        
-        if request.user.is_authenticated:
-            cart = get_object_or_404(
-                Cart.objects.filter(storefront=storefront, user=request.user),
-            )
-            cart.items.all().delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        
-        cart = get_object_or_404(
-            Cart.objects.filter(storefront=storefront, public_session_id=public_session_id),
-        )
+        user, token = _caller(request)
+
+        # Resolved the same way as every other endpoint, so a shopper who added
+        # anonymously and then signed in can still clear the cart they built.
+        cart = find_cart(storefront, user, token)
+        if cart is None:
+            raise Http404
+
         cart.items.all().delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-        
+
+
 class GetCartAPIView(APIView):
     permission_classes = [AllowAny]
 
+    # Atomic because resolving can claim or merge, and because find_cart locks
+    # the rows it returns.
     @transaction.atomic
     def get(self, request, *args, **kwargs):
         storefront = get_object_or_404(
             StoreFront.objects.filter(visible_storefront_q(request.user)),
             slug=kwargs["storefront_slug"],
         )
-        public_session_id = request.headers.get("X-Public-Cart-ID")
-        
+        user, token = _caller(request)
 
-        token_cart = (
-            Cart.objects.filter(public_session_id=public_session_id, storefront=storefront).first()
-            if public_session_id
-            else None
-        )
-        user = request.user if request.user.is_authenticated else None
-        
-        if user is None:
-            return Response(CartSerializer(token_cart).data, status=status.HTTP_200_OK) if token_cart else Response(status=status.HTTP_204_NO_CONTENT)
-        
-        user_cart = Cart.objects.filter(user=user, storefront=storefront).first()
+        # Deliberately does not create: a page view, including a crawler's,
+        # should never leave a cart row behind.
+        cart = find_cart(storefront, user, token)
+        if cart is None:
+            return Response(status=status.HTTP_204_NO_CONTENT)
 
-        if token_cart is None:
-            return Response(CartSerializer(user_cart).data, status=status.HTTP_200_OK) if user_cart else Response(status=status.HTTP_204_NO_CONTENT)
-        
-        if user_cart is None:
-            # create a new cart for that user and merge, since we know token cart exists
-            user_cart = Cart.objects.create(user=user, storefront=storefront)
-        merge_carts(token_cart, user_cart)
-        return Response(CartSerializer(user_cart).data, status=status.HTTP_200_OK)
+        return Response(CartSerializer(cart).data, status=status.HTTP_200_OK)

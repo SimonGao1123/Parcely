@@ -33,3 +33,10 @@ export type Product = {
     created_at: string;
     updated_at: string;
 };
+
+export type ProductCartSummary = Omit<Product, "plans" | "storefront"> & {
+    storefront: number;
+}
+export type PlanCartSummary = Omit<Plan, "product"> & {
+    product: ProductCartSummary;
+}

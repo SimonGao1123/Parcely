@@ -35,7 +35,9 @@ class CartItemSerializer(serializers.ModelSerializer):
     # is rejected identically whether or not it is already in the cart — the view
     # skips the top-up for subscriptions, which would otherwise swallow it.
     def validate(self, attrs):
-        plan = attrs.get("plan")
+        # A partial update sends only the quantity, so the plan has to come from
+        # the row being edited or the rule below silently passes.
+        plan = attrs.get("plan") or (self.instance.plan if self.instance else None)
         if plan and plan.product.is_subscription and attrs.get("quantity", 1) > 1:
             raise serializers.ValidationError(
                 {"quantity": "Subscription plans can only be purchased in a quantity of 1."}
