@@ -14,6 +14,7 @@ import Modal from "./modal";
 import PagePicker from "./pagePicker";
 import ProductPicker from "./product/productPicker";
 import { KIND_LABELS, type BlockRecipe, type Uploader } from "./stagedBlock";
+import TextField from "./textField";
 
 const KINDS: DraftKind[] = ["text", "media", "product", "gallery", "slideshow", "link"];
 
@@ -261,18 +262,7 @@ export default function BlockModal({
                     </div>
                 )}
 
-                {kind === "text" && (
-                    <label className="flex flex-col gap-1">
-                        <span className="text-sm font-medium text-stone-700">Text</span>
-                        <textarea
-                            value={text}
-                            rows={5}
-                            onChange={(e) => setText(e.target.value)}
-                            placeholder="Write something…"
-                            className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none"
-                        />
-                    </label>
-                )}
+                {kind === "text" && <TextField value={text} onChange={setText} />}
 
                 {kind === "media" && (
                     <ImagePicker
