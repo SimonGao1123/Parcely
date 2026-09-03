@@ -6,6 +6,7 @@ import Button from "@/components/button";
 import { formatPrice, planLabel } from "@/lib/price";
 import type { PageSummary } from "@/types/page";
 import type { Plan, Product } from "@/types/product";
+import type { Currency } from "@/types/storefront";
 import PageForm, { type PageFormValue } from "../pageForm";
 
 function Pill({ children, tone }: { children: React.ReactNode; tone: "neutral" | "warn" }) {
@@ -21,6 +22,7 @@ export default function ProductRow({
     product,
     page,
     storefrontSlug,
+    currency,
     renamingPage,
     pending,
     onEdit,
@@ -38,6 +40,7 @@ export default function ProductRow({
     // whose page was somehow removed out from under it
     page: PageSummary | undefined;
     storefrontSlug: string;
+    currency: Currency;
     renamingPage: boolean;
     pending: boolean;
     onEdit: () => void;
@@ -134,14 +137,14 @@ export default function ProductRow({
                     product.plans.map((plan) => (
                         <div key={plan.id} className="flex items-center gap-3">
                             <span className="flex-1 text-sm text-stone-800">
-                                {planLabel(plan, product.currency)}
+                                {planLabel(plan, currency)}
                             </span>
 
                             {/* The label collapses to the title when there is
                                 one, so the raw price is shown alongside it. */}
                             {plan.title && (
                                 <span className="text-xs text-stone-500">
-                                    {formatPrice(plan.price_cents, product.currency)}
+                                    {formatPrice(plan.price_cents, currency)}
                                 </span>
                             )}
                             {plan.trial_period_days ? (

@@ -1,7 +1,5 @@
 import type { MediaBlob } from "@/types/blob";
 
-export type Currency = "usd" | "eur" | "cad";
-
 export type BillingInterval = "day" | "week" | "month" | "year";
 
 // billing_interval/count are required when the parent product is a subscription
@@ -24,7 +22,6 @@ export type Product = {
     storefront: number;
     name: string;
     description: string;
-    currency: Currency;
     is_subscription: boolean;
     is_active: boolean;
     max_capacity: number | null;

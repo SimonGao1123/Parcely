@@ -6,7 +6,7 @@ import Button from "@/components/button";
 import { useUploadFile } from "@/lib/api/s3/uploadFile";
 import { deleteStorefront } from "@/lib/api/storefront/deleteStorefront";
 import { updateStorefront, type UpdateStorefrontInput } from "@/lib/api/storefront/updateStorefront";
-import type { Storefront, StorefrontStyle, Theme } from "@/types/storefront";
+import type { Currency, Storefront, StorefrontStyle, Theme } from "@/types/storefront";
 import ImagePicker from "../storefront/form/imagePicker";
 import StyleSelector from "../storefront/form/styleSelector";
 import ThemeSelector from "../storefront/form/themeSelector";
@@ -16,6 +16,8 @@ import SettingsTabs from "./settingsTabs";
 const inputClass =
     "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none";
 
+const CURRENCIES: Currency[] = ["usd", "eur", "cad"];
+
 export default function StorefrontSettings({ storefront }: { storefront: Storefront }) {
     const { upload, uploading } = useUploadFile();
 
@@ -23,6 +25,7 @@ export default function StorefrontSettings({ storefront }: { storefront: Storefr
     const [description, setDescription] = useState(storefront.description ?? "");
     const [theme, setTheme] = useState<Theme>(storefront.theme);
     const [style, setStyle] = useState<StorefrontStyle>(storefront.style);
+    const [currency, setCurrency] = useState<Currency>(storefront.currency);
 
     // A staged File and a "remove" flag are separate because on a PATCH the
     // absence of a new file is not the same instruction as detaching the old
@@ -73,6 +76,7 @@ export default function StorefrontSettings({ storefront }: { storefront: Storefr
         if (trimmedTitle !== storefront.title) patch.title = trimmedTitle;
         if (trimmedDescription !== storefront.description) patch.description = trimmedDescription;
         if (theme !== storefront.theme) patch.theme = theme;
+        if (currency !== storefront.currency) patch.currency = currency;
         if (JSON.stringify(style) !== JSON.stringify(storefront.style)) patch.style = style;
 
         try {
@@ -152,6 +156,25 @@ export default function StorefrontSettings({ storefront }: { storefront: Storefr
                         className={inputClass}
                     />
                 </label>
+
+                <div className="flex flex-col gap-1">
+                    <span className="text-sm font-medium text-stone-700">Currency</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {CURRENCIES.map((option) => (
+                            <Button
+                                key={option}
+                                variant="chip"
+                                active={currency === option}
+                                onClick={() => setCurrency(option)}
+                            >
+                                {option.toUpperCase()}
+                            </Button>
+                        ))}
+                    </div>
+                    <span className="text-xs text-stone-500">
+                        Every product in this storefront is priced in this currency.
+                    </span>
+                </div>
 
                 <ThemeSelector value={theme} onChange={setTheme} />
 

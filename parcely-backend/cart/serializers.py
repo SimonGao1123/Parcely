@@ -52,7 +52,8 @@ class CartSerializer(serializers.ModelSerializer):
 
     total_cents = serializers.SerializerMethodField()
 
-    # doesnt consider diff currencies / tax yet
+    # a plain sum: every plan in the cart is priced in the storefront's single
+    # currency. doesnt consider tax yet
     def get_total_cents(self, obj):
         return sum(item.plan.price_cents * item.quantity for item in obj.items.all())
 

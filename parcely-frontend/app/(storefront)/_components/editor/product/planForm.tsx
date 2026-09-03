@@ -4,12 +4,14 @@ import { useState } from "react";
 import Button from "@/components/button";
 import type { PlanInput } from "@/lib/api/product/planActions";
 import type { BillingInterval, Plan, Product } from "@/types/product";
+import type { Currency } from "@/types/storefront";
 import { INPUT_CLASS } from "./productForm";
 
 const INTERVALS: BillingInterval[] = ["day", "week", "month", "year"];
 
 export default function PlanForm({
     product,
+    currency,
     plan,
     pending,
     onSubmit,
@@ -18,6 +20,7 @@ export default function PlanForm({
     // drives the shape of the form: the interval fields are required on a
     // subscription and rejected outright on a one-time product
     product: Product;
+    currency: Currency;
     // absent in the create flow
     plan?: Plan;
     pending: boolean;
@@ -79,7 +82,7 @@ export default function PlanForm({
 
             <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium text-stone-700">
-                    Price ({product.currency.toUpperCase()})
+                    Price ({currency.toUpperCase()})
                 </span>
                 <input
                     type="number"

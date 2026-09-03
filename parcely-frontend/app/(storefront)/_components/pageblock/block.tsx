@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { PageBlock } from "@/types/block";
+import type { Currency } from "@/types/storefront";
 import { blockLayoutVars, blockStyleVars } from "./blockStyle";
 import GalleryBlock from "./blocks/galleryBlock";
 import LinkBlock from "./blocks/linkBlock";
@@ -12,7 +13,15 @@ import TextBlock from "./blocks/textBlock";
 // component into a variable during render trips react-hooks/static-components.
 // The switch also narrows the PageBlock union, so each branch gets the right
 // resolved_content type without a cast.
-function BlockContent({ block, storefrontSlug }: { block: PageBlock; storefrontSlug: string }) {
+function BlockContent({
+    block,
+    storefrontSlug,
+    currency,
+}: {
+    block: PageBlock;
+    storefrontSlug: string;
+    currency: Currency;
+}) {
     switch (block.kind) {
         case "text":
             return <TextBlock block={block} />;
@@ -23,7 +32,9 @@ function BlockContent({ block, storefrontSlug }: { block: PageBlock; storefrontS
         case "slideshow":
             return <SlideshowBlock block={block} />;
         case "product":
-            return <ProductBlock block={block} storefrontSlug={storefrontSlug} />;
+            return (
+                <ProductBlock block={block} storefrontSlug={storefrontSlug} currency={currency} />
+            );
         case "link":
             return <LinkBlock block={block} storefrontSlug={storefrontSlug} />;
     }
@@ -32,9 +43,11 @@ function BlockContent({ block, storefrontSlug }: { block: PageBlock; storefrontS
 export default function Block({
     block,
     storefrontSlug,
+    currency,
 }: {
     block: PageBlock;
     storefrontSlug: string;
+    currency: Currency;
 }) {
     const { alignment, padding } = block.style;
 
@@ -56,7 +69,7 @@ export default function Block({
             style={style}
             className="page-block bg-[var(--sf-bg)] font-[family-name:var(--sf-font)] text-[var(--sf-fg)]"
         >
-            <BlockContent block={block} storefrontSlug={storefrontSlug} />
+            <BlockContent block={block} storefrontSlug={storefrontSlug} currency={currency} />
         </div>
     );
 }

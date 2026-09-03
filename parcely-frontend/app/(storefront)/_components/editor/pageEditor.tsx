@@ -366,7 +366,12 @@ export default function PageEditor({
                     style={{ ...rowTrack, gridAutoRows: CELL, ...CELL_GUIDES }}
                 >
                     {blocks.map((block) => (
-                        <Block key={block.id} block={block} storefrontSlug={storefront.slug} />
+                        <Block
+                            key={block.id}
+                            block={block}
+                            storefrontSlug={storefront.slug}
+                            currency={storefront.currency}
+                        />
                     ))}
                 </div>
 
@@ -438,6 +443,7 @@ export default function PageEditor({
                     products={products}
                     pages={pages}
                     storefrontSlug={storefront.slug}
+                    currency={storefront.currency}
                     pending={pending}
                     onSubmit={handleModalSubmit}
                     onDelete={modal.mode === "edit" ? handleDelete : undefined}

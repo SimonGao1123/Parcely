@@ -5,14 +5,17 @@ import Button from "@/components/button";
 import { updateCartItem } from "@/lib/api/cart/updateCartItem";
 import { formatPrice, planIntervalSuffix, planName } from "@/lib/price";
 import type { CartItem } from "@/types/cart";
+import type { Currency } from "@/types/storefront";
 import BlobMedia from "@/app/(storefront)/_components/pageblock/blocks/blobMedia";
 
 export default function CartLineItem({
     storefrontSlug,
     item,
+    currency,
 }: {
     storefrontSlug: string;
     item: CartItem;
+    currency: Currency;
 }) {
     const [pending, startTransition] = useTransition();
     const [error, setError] = useState<string | null>(null);
@@ -50,13 +53,13 @@ export default function CartLineItem({
                         {suffix && ` / ${suffix}`}
                     </span>
                     <span className="text-sm opacity-70">
-                        {formatPrice(plan.price_cents, product.currency)} each
+                        {formatPrice(plan.price_cents, currency)} each
                     </span>
                 </div>
 
                 <div className="flex shrink-0 flex-col items-end gap-2">
                     <span className="font-medium">
-                        {formatPrice(plan.price_cents * quantity, product.currency)}
+                        {formatPrice(plan.price_cents * quantity, currency)}
                     </span>
 
                     {/* A subscription's only legal quantity is 1, so there is

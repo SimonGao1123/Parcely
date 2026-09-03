@@ -3,7 +3,6 @@
 import { refresh } from "next/cache";
 import { apiFetch } from "@/lib/api.server";
 import { errorFrom } from "@/lib/api/formatErrors";
-import type { Currency } from "@/types/product";
 
 // max_capacity is subscription-only and display_image_id is optional; the model
 // rejects a capacity on a one-time product, so the form omits it rather than
@@ -11,7 +10,6 @@ import type { Currency } from "@/types/product";
 export type CreateProductInput = {
     name: string;
     description: string;
-    currency: Currency;
     is_subscription: boolean;
     is_active: boolean;
     max_capacity?: number | null;

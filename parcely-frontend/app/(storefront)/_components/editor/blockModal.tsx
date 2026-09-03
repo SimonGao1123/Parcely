@@ -6,6 +6,7 @@ import { useUploadFile } from "@/lib/api/s3/uploadFile";
 import type { BlockDraft, DraftKind, PageBlock, PageBlockStyle } from "@/types/block";
 import type { PageSummary } from "@/types/page";
 import type { Product } from "@/types/product";
+import type { Currency } from "@/types/storefront";
 import { isResolvedBlob } from "../pageblock/blocks/resolved";
 import ImagePicker from "../storefront/form/imagePicker";
 import BlockStyleForm, { DEFAULT_PAGE_BLOCK_STYLE } from "./blockStyleForm";
@@ -53,6 +54,7 @@ export default function BlockModal({
     products,
     pages,
     storefrontSlug,
+    currency,
     pending,
     onSubmit,
     onDelete,
@@ -66,6 +68,7 @@ export default function BlockModal({
     // one is the reason the block exists
     pages: PageSummary[];
     storefrontSlug: string;
+    currency: Currency;
     pending: boolean;
     // resolves true when the caller accepted it, which is what closes the modal
     onSubmit: (value: BlockSubmit) => Promise<boolean>;
@@ -282,6 +285,7 @@ export default function BlockModal({
                         value={productId}
                         onChange={setProductId}
                         storefrontSlug={storefrontSlug}
+                        currency={currency}
                     />
                 )}
 

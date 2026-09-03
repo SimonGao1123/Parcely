@@ -5,12 +5,6 @@ from common.models import TimestampedModel
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from s3.models import Blob
-class Currency(models.TextChoices): # can be expanded to include other currencies
-    USD = "usd", "USD"
-    EUR = "eur", "EUR"
-    CAD = "cad", "CAD"
-    
-
 class BillingInterval(models.TextChoices):
     DAY = "day", "Day"
     WEEK = "week", "Week"
@@ -21,8 +15,7 @@ class BillingInterval(models.TextChoices):
 
 class Product(TimestampedModel):
     storefront = models.ForeignKey(StoreFront, on_delete=models.CASCADE, related_name="products")
-    currency = models.CharField(max_length=3, choices=Currency.choices)
-    
+
     is_subscription = models.BooleanField(default=True)
 
     name = models.CharField(max_length=255)

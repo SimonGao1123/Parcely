@@ -3,6 +3,9 @@ import type { PageSummary } from "@/types/page";
 import type { FontFamily } from "@/types/style";
 import type { User } from "@/types/user";
 
+// Storefront-wide: every product under it is priced in this currency.
+export type Currency = "usd" | "eur" | "cad";
+
 export type Theme =
     | "minimalist"
     | "professional"
@@ -28,6 +31,7 @@ export type StorefrontSummary = {
     slug: string;
     theme: Theme;
     style: StorefrontStyle;
+    currency: Currency;
     logo_image: MediaBlob | null;
     banner_image: MediaBlob | null;
     owner: User;

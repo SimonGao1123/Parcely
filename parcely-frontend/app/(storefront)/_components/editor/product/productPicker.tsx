@@ -5,11 +5,12 @@ import Link from "next/link";
 import Button from "@/components/button";
 import { formatPrice } from "@/lib/price";
 import type { Product } from "@/types/product";
+import type { Currency } from "@/types/storefront";
 
-function cheapest(product: Product): string | null {
+function cheapest(product: Product, currency: Currency): string | null {
     if (product.plans.length === 0) return null;
     const lowest = Math.min(...product.plans.map((plan) => plan.price_cents));
-    return formatPrice(lowest, product.currency);
+    return formatPrice(lowest, currency);
 }
 
 // A list of selectable rows rather than a <select>: picking a product to put on
@@ -20,11 +21,13 @@ export default function ProductPicker({
     value,
     onChange,
     storefrontSlug,
+    currency,
 }: {
     products: Product[];
     value: number | null;
     onChange: (productId: number) => void;
     storefrontSlug: string;
+    currency: Currency;
 }) {
     if (products.length === 0) {
         return (
@@ -65,7 +68,7 @@ export default function ProductPicker({
                 )}
 
                 {products.map((product) => {
-                    const price = cheapest(product);
+                    const price = cheapest(product, currency);
                     return (
                         <li key={product.id}>
                             <Button

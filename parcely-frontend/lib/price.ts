@@ -1,4 +1,5 @@
-import type { BillingInterval, Currency, Plan } from "@/types/product";
+import type { BillingInterval, Plan } from "@/types/product";
+import type { Currency } from "@/types/storefront";
 
 // The locale is pinned rather than left to the runtime default. Product blocks
 // render on the server and hydrate on the client, and those two would disagree

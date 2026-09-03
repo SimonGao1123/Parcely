@@ -3,7 +3,6 @@
 import { refresh, revalidatePath } from "next/cache";
 import { apiFetch } from "@/lib/api.server";
 import { errorFrom } from "@/lib/api/formatErrors";
-import type { Currency } from "@/types/product";
 
 // Every key optional because this is a PATCH: an omitted key leaves the field
 // alone, an explicit null clears it. That distinction is the whole reason
@@ -11,7 +10,6 @@ import type { Currency } from "@/types/product";
 export type UpdateProductInput = {
     name?: string;
     description?: string;
-    currency?: Currency;
     is_subscription?: boolean;
     is_active?: boolean;
     max_capacity?: number | null;

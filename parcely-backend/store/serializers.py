@@ -44,7 +44,7 @@ class StoreFrontSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = StoreFront
         fields = [
-            "id", "title", "description", "slug", "theme", "style",
+            "id", "title", "description", "slug", "theme", "style", "currency",
             "logo_image", "banner_image", "owner",
             "logo_image_id", "banner_image_id",
             "created_at", "updated_at", "is_draft", 
@@ -78,7 +78,7 @@ class StoreFrontSerializer(serializers.ModelSerializer):
     class Meta:
         model = StoreFront
         fields = [
-            "id", "title", "description", "slug", "theme", "style",
+            "id", "title", "description", "slug", "theme", "style", "currency",
             "logo_image", "banner_image", "owner",
             "logo_image_id", "banner_image_id",
             "created_at", "updated_at", "is_draft",

@@ -143,6 +143,7 @@ export default function ProductManager({
                             product={product}
                             page={page}
                             storefrontSlug={storefront.slug}
+                            currency={storefront.currency}
                             renamingPage={page !== undefined && renamingPageId === page.id}
                             onRenamePage={() => page && setRenamingPageId(page.id)}
                             onCancelRenamePage={() => setRenamingPageId(null)}
@@ -202,6 +203,7 @@ export default function ProductManager({
                     <PlanForm
                         key={editingPlan?.id ?? `create-${planProduct.id}`}
                         product={planProduct}
+                        currency={storefront.currency}
                         plan={editingPlan}
                         pending={pending}
                         onSubmit={handlePlanSubmit}

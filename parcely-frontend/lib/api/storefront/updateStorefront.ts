@@ -4,7 +4,7 @@ import { refresh, revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { apiFetch } from "@/lib/api.server";
 import { errorFrom } from "@/lib/api/formatErrors";
-import type { StorefrontStyle, Theme } from "@/types/storefront";
+import type { Currency, StorefrontStyle, Theme } from "@/types/storefront";
 
 // Every key optional because this is a PATCH: an omitted key means "unchanged",
 // which is a different instruction from an explicit null. That distinction is
@@ -15,6 +15,7 @@ export type UpdateStorefrontInput = {
     description?: string | null;
     theme?: Theme;
     style?: StorefrontStyle;
+    currency?: Currency;
     logo_image_id?: number | null;
     banner_image_id?: number | null;
     is_draft?: boolean;
@@ -41,6 +42,12 @@ export async function updateStorefront(
         revalidatePath("/");
         revalidatePath(`/${slug}`, "layout");
         redirect(`/${newSlug}/settings`);
+    }
+
+    // "layout" because every price in the storefront is formatted with this
+    // currency, and those are rendered on any page that carries a product block.
+    if (input.currency !== undefined) {
+        revalidatePath(`/${slug}`, "layout");
     }
 
     // is_draft decides whether the storefront appears in the public feed, which

@@ -5,16 +5,19 @@ import AddToCartButton from "@/app/(storefront)/_components/carts/addToCartButto
 import Button from "@/components/button";
 import { formatPrice, planIntervalSuffix, planName } from "@/lib/price";
 import type { ProductBlock as ProductBlockData } from "@/types/block";
-import type { Currency, Plan } from "@/types/product";
+import type { Plan } from "@/types/product";
+import type { Currency } from "@/types/storefront";
 import { objectPositionClass } from "./alignment";
 import BlobMedia from "./blobMedia";
 
 export default function ProductBlock({
     block,
     storefrontSlug,
+    currency,
 }: {
     block: ProductBlockData;
     storefrontSlug: string;
+    currency: Currency;
 }) {
     const product = block.resolved_content;
 
@@ -70,7 +73,7 @@ export default function ProductBlock({
                         )}
                     </div>
 
-                    {plan && <SelectedPrice plan={plan} currency={product.currency} />}
+                    {plan && <SelectedPrice plan={plan} currency={currency} />}
 
                     {product.plans.length > 0 && (
                         <div className="flex flex-col gap-[0.4em]">
@@ -81,7 +84,7 @@ export default function ProductBlock({
                                 <PlanRow
                                     key={option.id}
                                     plan={option}
-                                    currency={product.currency}
+                                    currency={currency}
                                     active={option.id === selectedPlan}
                                     onSelect={() => setSelectedPlan(option.id)}
                                 />

@@ -58,7 +58,12 @@ export default async function CartPage({
         <Shell>
             <ul className="flex flex-col">
                 {cart.items.map((item) => (
-                    <CartLineItem key={item.id} storefrontSlug={storefrontSlug} item={item} />
+                    <CartLineItem
+                        key={item.id}
+                        storefrontSlug={storefrontSlug}
+                        item={item}
+                        currency={storefront.currency}
+                    />
                 ))}
             </ul>
 
@@ -66,10 +71,7 @@ export default async function CartPage({
                 <div className="flex flex-col gap-0.5">
                     <span className="text-sm opacity-70">Total</span>
                     <span className="text-2xl font-semibold">
-                        {/* total_cents is a flat sum and currency lives per
-                            product, so this is only right for a single-currency
-                            cart — the same caveat CartSerializer already carries */}
-                        {formatPrice(cart.total_cents, cart.items[0].plan.product.currency)}
+                        {formatPrice(cart.total_cents, storefront.currency)}
                     </span>
                 </div>
 

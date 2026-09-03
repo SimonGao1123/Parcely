@@ -27,6 +27,11 @@ def default_page_block_style():
         "padding": None,
     }
 
+class Currency(models.TextChoices): # can be expanded to include other currencies
+    USD = "usd", "USD"
+    EUR = "eur", "EUR"
+    CAD = "cad", "CAD"
+
 class Theme(models.TextChoices):
     MINIMALIST = "minimalist", "Minimalist"
     PROFESSIONAL = "professional", "Professional"
@@ -52,6 +57,10 @@ class StoreFront(TimestampedModel):
     slug = models.SlugField(unique=True, max_length=255, db_index=True)
 
     theme = models.CharField(max_length=255, choices=Theme.choices, default=Theme.MINIMALIST)
+
+    # every product in a storefront is priced in this one currency, so a cart
+    # total is a plain sum
+    currency = models.CharField(max_length=3, choices=Currency.choices, default=Currency.USD)
 
     style = models.JSONField(
         default=default_storefront_style,

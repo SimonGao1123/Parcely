@@ -33,7 +33,6 @@ class ProductSerializer(serializers.ModelSerializer):
             'display_image',
             'storefront',
             'plans',
-            'currency',
             'is_active',
             'display_image_id',
             'created_at', 'updated_at'
@@ -51,14 +50,14 @@ class ProductSummarySerializer(serializers.ModelSerializer): # for display in pa
     
     class Meta:
         model = Product
-        fields = ['id', 'name', 'description', 'is_subscription', 'max_capacity', 'display_image', 'plans', 'storefront', 'currency', 'is_active', 'created_at', 'updated_at', 'display_image_id']
+        fields = ['id', 'name', 'description', 'is_subscription', 'max_capacity', 'display_image', 'plans', 'storefront', 'is_active', 'created_at', 'updated_at', 'display_image_id']
         read_only_fields = ['id', 'created_at', 'updated_at', 'storefront']
 
 class ProductCartItemSerializer(serializers.ModelSerializer):
     display_image = BlobSerializer(read_only=True)
     class Meta:
         model = Product
-        fields = ['id', 'name', 'description', 'is_subscription', 'max_capacity', 'display_image', 'storefront', 'currency', 'is_active', 'created_at', 'updated_at', 'display_image_id']
+        fields = ['id', 'name', 'description', 'is_subscription', 'max_capacity', 'display_image', 'storefront', 'is_active', 'created_at', 'updated_at', 'display_image_id']
         read_only_fields = ['id', 'created_at', 'updated_at', 'storefront']
 class PlanCartItemSerializer(serializers.ModelSerializer):
     product = ProductCartItemSerializer(read_only = True)

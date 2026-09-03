@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Button from "@/components/button";
 import { useUploadFile } from "@/lib/api/s3/uploadFile";
-import type { Currency, Product } from "@/types/product";
+import type { Product } from "@/types/product";
 import ImagePicker from "../../storefront/form/imagePicker";
 
 // Shared with planForm — the two sit side by side in the same modal stack and
@@ -11,14 +11,11 @@ import ImagePicker from "../../storefront/form/imagePicker";
 export const INPUT_CLASS =
     "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none";
 
-const CURRENCIES: Currency[] = ["usd", "eur", "cad"];
-
 // Structurally satisfies both CreateProductInput and UpdateProductInput; the
 // caller picks which action to hand it to.
 export type ProductFormValue = {
     name: string;
     description: string;
-    currency: Currency;
     is_subscription: boolean;
     is_active: boolean;
     max_capacity: number | null;
@@ -44,7 +41,6 @@ export default function ProductForm({
 
     const [name, setName] = useState(product?.name ?? "");
     const [description, setDescription] = useState(product?.description ?? "");
-    const [currency, setCurrency] = useState<Currency>(product?.currency ?? "usd");
     const [isSubscription, setIsSubscription] = useState(product?.is_subscription ?? true);
     const [isActive, setIsActive] = useState(product?.is_active ?? true);
     const [capacity, setCapacity] = useState(product?.max_capacity?.toString() ?? "");
@@ -92,7 +88,6 @@ export default function ProductForm({
         const value: ProductFormValue = {
             name: name.trim(),
             description: description.trim(),
-            currency,
             is_subscription: isSubscription,
             is_active: isActive,
             // Always sent, never omitted. Switching an existing product to
@@ -162,21 +157,6 @@ export default function ProductForm({
                     </span>
                 )}
             </div>
-
-            <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium text-stone-700">Currency</span>
-                <select
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value as Currency)}
-                    className={INPUT_CLASS}
-                >
-                    {CURRENCIES.map((option) => (
-                        <option key={option} value={option}>
-                            {option.toUpperCase()}
-                        </option>
-                    ))}
-                </select>
-            </label>
 
             {/* Subscriptions only — the model rejects a capacity on a one-time
                 product outright. */}

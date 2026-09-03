@@ -31,7 +31,12 @@ export default function PageGrid({ page, storefront }: { page: Page; storefront:
                 row track is also what stops content from growing the grid. */}
             <div className="grid grid-cols-12" style={{ gridAutoRows: "calc(100cqw / 12)" }}>
                 {blocks.map((block) => (
-                    <Block key={block.id} block={block} storefrontSlug={storefront.slug} />
+                    <Block
+                        key={block.id}
+                        block={block}
+                        storefrontSlug={storefront.slug}
+                        currency={storefront.currency}
+                    />
                 ))}
             </div>
         </div>
