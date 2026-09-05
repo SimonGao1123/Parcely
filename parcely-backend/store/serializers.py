@@ -155,6 +155,22 @@ class PageLayoutSerializer(serializers.Serializer):
     blocks = BlockLayoutItemSerializer(many=True)
 
 
+class PageBlockBatchSerializer(serializers.Serializer):
+    """Everything one editing session changed, as a single payload.
+
+    Shape only. `creates` and `updates` stay opaque because the real validation
+    is PageBlockSerializer and PageBlock.save(), which the view runs per item —
+    restating those rules here would only let the two drift apart.
+
+    Every key is optional: a session that merely dragged a block sends layout
+    alone.
+    """
+    deletes = serializers.ListField(child=serializers.IntegerField(), required=False, default=list)
+    layout = BlockLayoutItemSerializer(many=True, required=False, default=list)
+    updates = serializers.ListField(child=serializers.JSONField(), required=False, default=list)
+    creates = serializers.ListField(child=serializers.JSONField(), required=False, default=list)
+
+
 class PageSerializer(serializers.ModelSerializer):
     logo_image = BlobSerializer(read_only=True)
     # storefront = StoreFrontSummarySerializer(read_only=True) unecessary currently

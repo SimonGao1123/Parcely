@@ -58,6 +58,12 @@ function Override({
     );
 }
 
+// Fixed width and tabular figures so the row doesn't shift as digits are gained
+// and lost mid-drag.
+function Readout({ children }: { children: React.ReactNode }) {
+    return <span className="w-12 text-xs text-stone-500 tabular-nums">{children}</span>;
+}
+
 export default function BlockStyleForm({
     value,
     onChange,
@@ -132,6 +138,7 @@ export default function BlockStyleForm({
                     onChange={(e) => set("font_scale", Number(e.target.value))}
                     className="w-40 cursor-pointer"
                 />
+                <Readout>{(value.font_scale ?? SEEDS.font_scale).toFixed(1)}</Readout>
             </Override>
 
             <Override
@@ -148,6 +155,7 @@ export default function BlockStyleForm({
                     onChange={(e) => set("line_spacing", Number(e.target.value))}
                     className="w-40 cursor-pointer"
                 />
+                <Readout>{(value.line_spacing ?? SEEDS.line_spacing).toFixed(1)}</Readout>
             </Override>
 
             <Override
@@ -164,6 +172,7 @@ export default function BlockStyleForm({
                     onChange={(e) => set("padding", Number(e.target.value))}
                     className="w-40 cursor-pointer"
                 />
+                <Readout>{value.padding ?? SEEDS.padding}px</Readout>
             </Override>
 
             {/* Alignment has no override toggle: unlike the rest it is never

@@ -2,11 +2,7 @@
 
 import { useRef, useState, type PointerEvent } from "react";
 import Button from "@/components/button";
-import { createPageBlock } from "@/lib/api/page/createPageBlock";
-import { deletePageBlock } from "@/lib/api/page/deletePageBlock";
-import { updatePageBlock } from "@/lib/api/page/updatePageBlock";
-import { useUploadFile } from "@/lib/api/s3/uploadFile";
-import type { BlockDraft, BlockPosition, PageBlock } from "@/types/block";
+import type { BlockPosition, PageBlock } from "@/types/block";
 import type { Page, PageSummary } from "@/types/page";
 import type { Product } from "@/types/product";
 import type { Storefront } from "@/types/storefront";
@@ -24,8 +20,9 @@ import {
     isWithinBounds,
     wouldOverlap,
 } from "./gridGeometry";
-import { DEFAULT_SPANS, type StagedBlock } from "./stagedBlock";
-import { useLayoutAutosave } from "./useLayoutAutosave";
+import { DEFAULT_SPANS, type BlockRecipe, type StagedBlock } from "./stagedBlock";
+import { useBeforeUnload } from "./useBeforeUnload";
+import { usePageSave } from "./usePageSave";
 
 const CELL = "calc(100cqw / 12)";
 
@@ -83,8 +80,20 @@ export default function PageEditor({
     const [ghost, setGhost] = useState<{ position: BlockPosition; valid: boolean } | null>(null);
     const [modal, setModal] = useState<ModalState | null>(null);
     const [dragging, setDragging] = useState(false);
-    const [pending, setPending] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+
+    // Nothing below reaches the network. Every change an editing session makes is
+    // held here until Save, which commits the lot in one request.
+    //
+    // A block whose content was composed or edited locally keeps its recipe here,
+    // keyed by block id. The recipe's build is deferred rather than run: running
+    // it uploads files, and blobs can't be un-uploaded.
+    const [drafts, setDrafts] = useState<Map<number, BlockRecipe>>(new Map());
+    // server ids only — a block created and removed in the same session never
+    // existed as far as the server is concerned
+    const [deleted, setDeleted] = useState<number[]>([]);
+    // Blocks created in this session get a negative id until the server assigns a
+    // real one, so the sign alone says whether a block exists yet.
+    const nextId = useRef(-1);
 
     const gridRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef<DragState | null>(null);
@@ -93,22 +102,25 @@ export default function PageEditor({
     // state — the setter is queued, not applied, by the time the drop lands
     const ghostRef = useRef<{ position: BlockPosition; valid: boolean } | null>(null);
 
-    // The staged block's files are uploaded here, at the drop, rather than when
-    // the modal composed it — a chip that is discarded or never dropped should
-    // not leave blobs behind. Cached because a drop that fails leaves the chip
-    // in place to be dragged again, and confirmed blobs are permanent.
-    const { upload } = useUploadFile();
-    const blobIds = useRef(new Map<File, number>());
+    const { dirty, status, error, save, dismissError } = usePageSave({
+        storefrontSlug: storefront.slug,
+        pageSlug: page.slug,
+        baseline: page.blocks,
+        blocks,
+        drafts,
+        deleted,
+        onSaved: (saved) => {
+            setBlocks(saved);
+            setDrafts(new Map());
+            setDeleted([]);
+        },
+    });
 
-    const uploadOnce = async (file: File) => {
-        const cached = blobIds.current.get(file);
-        if (cached !== undefined) return cached;
-        const id = await upload(file);
-        blobIds.current.set(file, id);
-        return id;
-    };
+    const saving = status === "uploading" || status === "saving";
 
-    const { status, retry } = useLayoutAutosave(storefront.slug, page.slug, blocks);
+    // Covers refresh, tab close and the URL bar. The one in-app way out of the
+    // editor is the toolbar link, which the toolbar guards itself.
+    useBeforeUnload(dirty);
 
     const rowCount = gridRowCount(blocks.map((block) => block.layout));
     const rowTrack = { gridTemplateRows: `repeat(${rowCount}, ${CELL})` };
@@ -223,91 +235,70 @@ export default function PageEditor({
         setGhost(next);
     }
 
-    async function endStagedDrag() {
+    // The drop places the block, it doesn't create it: the chip's recipe moves
+    // into drafts and its files stay on disk until Save.
+    function endStagedDrag() {
         const block = stagedRef.current;
         const drop = ghostRef.current;
         cancelStagedDrag();
         if (!block || !drop?.valid) return;
 
-        setError(null);
-        setPending(true);
-
-        let draft: BlockDraft;
-        try {
-            draft = await block.build(uploadOnce);
-        } catch (uploadError) {
-            setPending(false);
-            setError(uploadError instanceof Error ? uploadError.message : String(uploadError));
-            return;
-        }
-
-        const result = await createPageBlock(storefront.slug, page.slug, {
-            ...draft,
-            layout: { desktop: drop.position, tablet: null, mobile: null },
-            style: block.style,
-        });
-        setPending(false);
-
-        if ("error" in result) {
-            setError(result.error);
-            return;
-        }
-        setBlocks((current) => [...current, result.block]);
+        const id = nextId.current--;
+        setBlocks((current) => [
+            ...current,
+            // the modal's stand-in, re-placed: it was laid out at the origin for
+            // the single-cell preview grid, and the drop is the real position
+            {
+                ...block.preview,
+                id,
+                layout: { desktop: drop.position, tablet: null, mobile: null },
+            },
+        ]);
+        setDrafts((current) => new Map(current).set(id, block));
         setStaged((current) => current.filter((entry) => entry.key !== block.key));
     }
 
-    async function handleModalSubmit(value: BlockSubmit): Promise<boolean> {
-        if (value.mode === "stage") {
+    function handleModalSubmit(value: BlockSubmit) {
+        // A new block has nowhere to go yet, so it waits on the sidebar as a chip
+        // until it's dragged onto a free cell.
+        if (modal?.mode !== "edit") {
             setStaged((current) => [
                 ...current,
                 {
                     ...value.recipe,
+                    preview: value.preview,
                     key: crypto.randomUUID(),
                     span: DEFAULT_SPANS[value.recipe.kind],
                 },
             ]);
-            return true;
+            return;
         }
-        if (modal?.mode !== "edit") return false;
 
-        setError(null);
-        setPending(true);
-        const result = await updatePageBlock(storefront.slug, page.slug, modal.blockId, {
-            content: value.draft.content,
-            style: value.style,
-        });
-        setPending(false);
-
-        if ("error" in result) {
-            setError(result.error);
-            return false;
-        }
+        const { blockId } = modal;
         setBlocks((current) =>
             current.map((block) =>
-                // the server's layout is discarded in favour of the local one:
-                // a drag still inside the autosave debounce hasn't reached the
-                // database yet, and taking the response's copy would undo it
-                block.id === result.block.id ? { ...result.block, layout: block.layout } : block,
+                // the block keeps the position it already has on the canvas; only
+                // its content and style were edited
+                block.id === blockId ? { ...value.preview, id: blockId, layout: block.layout } : block,
             ),
         );
-        return true;
+        setDrafts((current) => new Map(current).set(blockId, value.recipe));
     }
 
-    async function handleDelete() {
+    function handleDelete() {
         if (modal?.mode !== "edit") return;
         if (!window.confirm("Delete this block? This can't be undone.")) return;
 
         const { blockId } = modal;
-        setError(null);
-        setPending(true);
-        const result = await deletePageBlock(storefront.slug, page.slug, blockId);
-        setPending(false);
-
-        if (result?.error) {
-            setError(result.error);
-            return;
-        }
         setBlocks((current) => current.filter((block) => block.id !== blockId));
+        setDrafts((current) => {
+            const next = new Map(current);
+            next.delete(blockId);
+            return next;
+        });
+        // a block the server never saw needs no delete — dropping it locally is
+        // the whole operation
+        if (blockId > 0) setDeleted((current) => [...current, blockId]);
         setModal(null);
     }
 
@@ -320,7 +311,9 @@ export default function PageEditor({
                 storefrontSlug={storefront.slug}
                 title={page.title}
                 status={status}
-                onRetry={retry}
+                dirty={dirty}
+                saving={saving}
+                onSave={save}
             />
 
             {/* Sibling of the grid wrapper, like the chrome below and for the
@@ -440,11 +433,13 @@ export default function PageEditor({
                     // remount per target so the form seeds from the right block
                     key={modal.mode === "edit" ? `edit-${modal.blockId}` : "create"}
                     block={editingBlock}
+                    seed={editingBlock && drafts.get(editingBlock.id)?.form}
                     products={products}
                     pages={pages}
                     storefrontSlug={storefront.slug}
                     currency={storefront.currency}
-                    pending={pending}
+                    storefrontStyle={storefront.style}
+                    pending={saving}
                     onSubmit={handleModalSubmit}
                     onDelete={modal.mode === "edit" ? handleDelete : undefined}
                     onClose={() => setModal(null)}
@@ -454,7 +449,7 @@ export default function PageEditor({
             {error && (
                 <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 shadow-lg">
                     <span className="whitespace-pre-line">{error}</span>
-                    <Button variant="link" onClick={() => setError(null)} className="text-red-700">
+                    <Button variant="link" onClick={dismissError} className="text-red-700">
                         Dismiss
                     </Button>
                 </div>

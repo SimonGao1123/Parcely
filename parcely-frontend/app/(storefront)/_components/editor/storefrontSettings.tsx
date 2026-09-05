@@ -12,6 +12,7 @@ import StyleSelector from "../storefront/form/styleSelector";
 import ThemeSelector from "../storefront/form/themeSelector";
 import PageManager from "./pageManager";
 import SettingsTabs from "./settingsTabs";
+import StorefrontChromePreview from "./storefrontChromePreview";
 
 const inputClass =
     "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none";
@@ -117,6 +118,20 @@ export default function StorefrontSettings({ storefront }: { storefront: Storefr
         setSaving(false);
     };
 
+    // Spread rather than rebuilt, so slug, pages and homepage survive: the
+    // themed navbar needs a whole storefront, and only these fields are being
+    // edited. Removal is reflected immediately; a staged file can't be, having
+    // no url until it is uploaded.
+    const previewStorefront: Storefront = {
+        ...storefront,
+        title: title.trim() || storefront.title,
+        description: description.trim() || null,
+        theme,
+        style,
+        logo_image: logoRemoved ? null : storefront.logo_image,
+        banner_image: bannerRemoved ? null : storefront.banner_image,
+    };
+
     // homepage is nullable on the model, so there isn't always a page to go back to
     const backHref = storefront.homepage ? `/${storefront.slug}/${storefront.homepage.slug}` : "/personal";
 
@@ -179,6 +194,8 @@ export default function StorefrontSettings({ storefront }: { storefront: Storefr
                 <ThemeSelector value={theme} onChange={setTheme} />
 
                 <StyleSelector value={style} onChange={setStyle} />
+
+                <StorefrontChromePreview storefront={previewStorefront} />
 
                 <div className="flex flex-wrap gap-8">
                     {/* existingUrl is forced to null once removed, so the preview

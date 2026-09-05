@@ -63,6 +63,7 @@ export default async function CartPage({
                         storefrontSlug={storefrontSlug}
                         item={item}
                         currency={storefront.currency}
+                        fallbackImage={storefront.logo_image}
                     />
                 ))}
             </ul>

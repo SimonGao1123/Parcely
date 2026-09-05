@@ -43,6 +43,16 @@ export function planIntervalSuffix(plan: PlanPricing): string | null {
     return count === 1 ? short : `${count} ${short}`;
 }
 
+// Spelled out rather than compact: "mo" is too terse to sit under the cart's
+// RECURRING PAYMENT label. Null on a one-time plan, which is not billed again.
+export function planIntervalPhrase(plan: PlanPricing): string | null {
+    if (!plan.billing_interval) return null;
+    const count = plan.billing_interval_count ?? 1;
+    return count === 1
+        ? `every ${plan.billing_interval}`
+        : `every ${count} ${plan.billing_interval}s`;
+}
+
 // Left side of a plan row. title wins when set; otherwise the interval is
 // spelled out ("Monthly", "12 months") so the price can sit on the other side.
 export function planName(plan: PlanPricing): string {

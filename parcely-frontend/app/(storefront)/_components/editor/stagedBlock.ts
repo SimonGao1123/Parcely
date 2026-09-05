@@ -1,4 +1,5 @@
-import type { BlockDraft, DraftKind, PageBlockStyle } from "@/types/block";
+import type { BlockDraft, DraftKind, PageBlock, PageBlockStyle } from "@/types/block";
+import type { ExistingMedia } from "./mediaListPicker";
 
 export type BlockSpan = { col_span: number; row_span: number };
 
@@ -26,25 +27,47 @@ export const KIND_LABELS: Record<DraftKind, string> = {
 
 export type Uploader = (file: File) => Promise<number>;
 
-// A block composed in the modal but not yet created.
+// A block composed in the modal but not yet written to the server.
 //
 // build is deferred rather than a finished draft because turning the picked
 // files into blob ids means uploading them, and an upload can't be undone: a
-// chip that is discarded, or left behind when the page is closed, would leave
-// blobs in the bucket that nothing references. Running it at the drop is what
-// makes staging free.
+// block that is discarded, or left behind when the page is closed, would leave
+// blobs in the bucket that nothing references. It runs at Save and nowhere else,
+// which is what makes everything before Save free.
+// Everything the modal's form held, so re-opening a block that hasn't been saved
+// yet can put the owner back where they left off. Nothing else can reconstruct
+// it: the canvas stand-in for an unsaved media block is a caption, and the
+// picked File itself only exists here.
+export type BlockForm = {
+    kind: DraftKind;
+    style: PageBlockStyle;
+    text: string;
+    productId: number | null;
+    mediaFile: File | null;
+    pageId: number | null;
+    linkText: string;
+    linkFile: File | null;
+    linkMediaId: number | null;
+    listFiles: File[];
+    existingList: ExistingMedia[];
+};
+
 export type BlockRecipe = {
     kind: DraftKind;
     // for the chip, since there is no draft to derive it from yet
     summary: string;
     build: (upload: Uploader) => Promise<BlockDraft>;
     style: PageBlockStyle;
+    form: BlockForm;
 };
 
-// It has no id because it has no position yet — dropping it on the grid is what
-// supplies both, in the same request.
+// A recipe waiting on the sidebar for somewhere to go. It has no id because it
+// has no position yet — dropping it on the grid supplies both.
 export type StagedBlock = BlockRecipe & {
     // local only, for the React key and for discarding the right chip
     key: string;
     span: BlockSpan;
+    // What the canvas renders once it lands. A block that has never been saved
+    // has no server resolved_content, so the modal's stand-in is all there is.
+    preview: PageBlock;
 };

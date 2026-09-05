@@ -1,29 +1,31 @@
 'use client';
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Button from "@/components/button";
-import { useUploadFile } from "@/lib/api/s3/uploadFile";
 import type { BlockDraft, DraftKind, PageBlock, PageBlockStyle } from "@/types/block";
 import type { PageSummary } from "@/types/page";
 import type { Product } from "@/types/product";
-import type { Currency } from "@/types/storefront";
+import type { Currency, StorefrontStyle } from "@/types/storefront";
 import { isResolvedBlob } from "../pageblock/blocks/resolved";
 import ImagePicker from "../storefront/form/imagePicker";
+import BlockPreview, { layoutFor, previewBlock, type PreviewContent } from "./blockPreview";
 import BlockStyleForm, { DEFAULT_PAGE_BLOCK_STYLE } from "./blockStyleForm";
 import MediaListPicker, { type ExistingMedia } from "./mediaListPicker";
 import Modal from "./modal";
 import PagePicker from "./pagePicker";
 import ProductPicker from "./product/productPicker";
-import { KIND_LABELS, type BlockRecipe, type Uploader } from "./stagedBlock";
+import { KIND_LABELS, type BlockForm, type BlockRecipe, type Uploader } from "./stagedBlock";
 import TextField from "./textField";
 
 const KINDS: DraftKind[] = ["text", "media", "product", "gallery", "slideshow", "link"];
 
-export type BlockSubmit =
-    // resolved already: an edit is written the moment it is submitted
-    | { mode: "edit"; draft: BlockDraft; style: PageBlockStyle }
-    // nothing uploaded yet — the caller runs the recipe when the block is dropped
-    | { mode: "stage"; recipe: BlockRecipe };
+// Nothing is uploaded or written here. The recipe's files are turned into blob
+// ids by the caller at Save, and `preview` is what stands in for the block on
+// the canvas until then.
+export type BlockSubmit = {
+    recipe: BlockRecipe;
+    preview: PageBlock;
+};
 
 function initialKind(block: PageBlock | undefined): DraftKind {
     return block?.kind ?? "text";
@@ -51,10 +53,12 @@ function initialList(block: PageBlock | undefined): ExistingMedia[] {
 
 export default function BlockModal({
     block,
+    seed,
     products,
     pages,
     storefrontSlug,
     currency,
+    storefrontStyle,
     pending,
     onSubmit,
     onDelete,
@@ -62,6 +66,10 @@ export default function BlockModal({
 }: {
     // absent in the create flow
     block?: PageBlock;
+    // The form as this block was last left, for a block that has been composed
+    // but not yet saved. It outranks `block`, which for an unsaved block is only
+    // the canvas stand-in and may not even carry the right kind.
+    seed?: BlockForm;
     // the whole catalogue, fetched by the route — the picker never loads
     products: Product[];
     // every page of the storefront, product pages included: pointing a link at
@@ -69,54 +77,46 @@ export default function BlockModal({
     pages: PageSummary[];
     storefrontSlug: string;
     currency: Currency;
+    // what the preview inherits wherever a style field is left to the storefront
+    storefrontStyle: StorefrontStyle;
+    // a save is in flight; the page must not be edited out from under it
     pending: boolean;
-    // resolves true when the caller accepted it, which is what closes the modal
-    onSubmit: (value: BlockSubmit) => Promise<boolean>;
+    onSubmit: (value: BlockSubmit) => void;
     onDelete?: () => void;
     onClose: () => void;
 }) {
-    const { upload, uploading } = useUploadFile();
+    const [kind, setKind] = useState<DraftKind>(seed?.kind ?? initialKind(block));
+    const [style, setStyle] = useState<PageBlockStyle>(
+        seed?.style ?? block?.style ?? DEFAULT_PAGE_BLOCK_STYLE,
+    );
 
-    const [kind, setKind] = useState<DraftKind>(() => initialKind(block));
-    const [style, setStyle] = useState<PageBlockStyle>(block?.style ?? DEFAULT_PAGE_BLOCK_STYLE);
-    const [error, setError] = useState<string | null>(null);
-
-    const [text, setText] = useState(block?.kind === "text" ? block.content.text : "");
+    const [text, setText] = useState(
+        seed?.text ?? (block?.kind === "text" ? block.content.text : ""),
+    );
     // Seeded from content, not resolved_content, for the same reason as
     // initialList: the stored id has to survive an edit that never touched it.
     const [productId, setProductId] = useState<number | null>(
-        block?.kind === "product" ? block.content.product_id : null,
+        seed?.productId ?? (block?.kind === "product" ? block.content.product_id : null),
     );
-    const [mediaFile, setMediaFile] = useState<File | null>(null);
+    const [mediaFile, setMediaFile] = useState<File | null>(seed?.mediaFile ?? null);
 
     const [pageId, setPageId] = useState<number | null>(
-        block?.kind === "link" ? block.content.page_id : null,
+        seed?.pageId ?? (block?.kind === "link" ? block.content.page_id : null),
     );
     const [linkText, setLinkText] = useState(
-        block?.kind === "link" ? (block.content.text ?? "") : "",
+        seed?.linkText ?? (block?.kind === "link" ? (block.content.text ?? "") : ""),
     );
-    const [linkFile, setLinkFile] = useState<File | null>(null);
+    const [linkFile, setLinkFile] = useState<File | null>(seed?.linkFile ?? null);
     // Held in state rather than read off the block, because a link's media is
     // optional and so can actually be removed — unlike a media block's.
     const [linkMediaId, setLinkMediaId] = useState<number | null>(
-        block?.kind === "link" ? (block.content.media_id ?? null) : null,
+        seed?.linkMediaId ?? (block?.kind === "link" ? (block.content.media_id ?? null) : null),
     );
 
-    const [listFiles, setListFiles] = useState<File[]>([]);
-    const [existingList, setExistingList] = useState<ExistingMedia[]>(() => initialList(block));
-
-    // Confirmed blobs are permanent, so a failed submit must not upload a second
-    // copy on retry. Same cache as pageForm and storefrontSettings. Only the
-    // edit flow reaches it; staging defers to the editor's uploader.
-    const blobIds = useRef(new Map<File, number>());
-
-    const uploadOnce = async (file: File) => {
-        const cached = blobIds.current.get(file);
-        if (cached !== undefined) return cached;
-        const id = await upload(file);
-        blobIds.current.set(file, id);
-        return id;
-    };
+    const [listFiles, setListFiles] = useState<File[]>(seed?.listFiles ?? []);
+    const [existingList, setExistingList] = useState<ExistingMedia[]>(
+        () => seed?.existingList ?? initialList(block),
+    );
 
     const existingMediaUrl =
         block?.kind === "media" ? (block.resolved_content?.url ?? null) : null;
@@ -129,6 +129,45 @@ export default function BlockModal({
             : null;
 
     const listCount = existingList.length + listFiles.length;
+
+    // Files are staged, not uploaded, so they have no url the renderer could
+    // use — the preview shows a caption in their place until the block is saved.
+    const stagedFiles = (() => {
+        switch (kind) {
+            case "media":
+                return mediaFile ? 1 : 0;
+            case "link":
+                return linkFile ? 1 : 0;
+            case "gallery":
+            case "slideshow":
+                return listFiles.length;
+            default:
+                return 0;
+        }
+    })();
+
+    const previewContent: PreviewContent = {
+        text,
+        productId,
+        pageId,
+        linkText,
+        linkMedia:
+            block?.kind === "link" && linkMediaId !== null ? block.resolved_content.media : null,
+        media: block?.kind === "media" ? block.resolved_content : null,
+        list: existingList,
+        stagedFiles,
+    };
+
+    // Rendered below and submitted as-is, so what the owner approves in the
+    // preview is exactly what appears on the canvas.
+    const preview = previewBlock({
+        kind,
+        style,
+        layout: layoutFor(kind, block),
+        content: previewContent,
+        products,
+        pages,
+    });
 
     // A media block has no valid empty state, so its picker offers replace but
     // not remove; gallery and slideshow just need to keep at least one entry.
@@ -213,35 +252,30 @@ export default function BlockModal({
         }
     };
 
-    const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    // Uploads nothing and writes nothing: the picked files ride along inside the
+    // recipe's build, which the editor only runs at Save. A block composed here
+    // and then discarded must not leave blobs behind.
+    const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (!canSubmit) return;
 
-        setError(null);
-
-        // Staging uploads nothing: the files ride along in the recipe and are
-        // only sent once the block lands on the grid.
-        if (!editing) {
-            const accepted = await onSubmit({
-                mode: "stage",
-                recipe: { kind, summary, build: buildDraft, style },
-            });
-            if (accepted) onClose();
-            return;
-        }
-
-        let draft: BlockDraft;
-        try {
-            draft = await buildDraft(uploadOnce);
-        } catch (uploadError) {
-            setError(uploadError instanceof Error ? uploadError.message : String(uploadError));
-            return;
-        }
-
-        if (await onSubmit({ mode: "edit", draft, style })) onClose();
+        const form: BlockForm = {
+            kind,
+            style,
+            text,
+            productId,
+            mediaFile,
+            pageId,
+            linkText,
+            linkFile,
+            linkMediaId,
+            listFiles,
+            existingList,
+        };
+        onSubmit({ recipe: { kind, summary, build: buildDraft, style, form }, preview });
+        onClose();
     };
 
-    const busy = pending || uploading;
     const editing = block !== undefined;
 
     return (
@@ -333,19 +367,20 @@ export default function BlockModal({
                     />
                 )}
 
-                <BlockStyleForm value={style} onChange={setStyle} />
+                <BlockPreview
+                    preview={preview}
+                    storefrontSlug={storefrontSlug}
+                    currency={currency}
+                    storefrontStyle={storefrontStyle}
+                />
 
-                {error && (
-                    <p className="whitespace-pre-line rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                        {error}
-                    </p>
-                )}
+                <BlockStyleForm value={style} onChange={setStyle} />
 
                 <div className="flex items-center justify-between gap-3 border-t border-stone-200 pt-4">
                     {onDelete ? (
                         <Button
                             variant="outline"
-                            disabled={busy}
+                            disabled={pending}
                             onClick={onDelete}
                             className="border-red-300 text-red-700 hover:border-red-500"
                         >
@@ -359,8 +394,8 @@ export default function BlockModal({
                         <Button variant="link" onClick={onClose}>
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={busy || !canSubmit}>
-                            {uploading ? "Uploading…" : editing ? "Save" : "Add"}
+                        <Button type="submit" disabled={pending || !canSubmit}>
+                            {editing ? "Done" : "Add"}
                         </Button>
                     </div>
                 </div>
