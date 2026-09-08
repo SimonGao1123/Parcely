@@ -68,6 +68,9 @@ class Plan(TimestampedModel):
 
     trial_period_days = models.PositiveIntegerField(null=True, blank=True)
 
+    stripe_product_id = models.CharField(max_length=255, null=True, blank=True)
+    stripe_price_id = models.CharField(max_length=255, null=True, blank=True)
+
     def clean(self):
         super().clean()
         if self.product.is_subscription and (self.billing_interval is None or self.billing_interval_count is None):

@@ -32,6 +32,12 @@ AWS_S3_REGION = os.environ['AWS_S3_REGION']
 AWS_ACCESS_KEY_ID = os.environ['AWS_ACCESS_KEY_ID']
 AWS_SECRET_ACCESS_KEY = os.environ['AWS_SECRET_ACCESS_KEY']
 
+STRIPE_SECRET_KEY = os.environ['STRIPE_SECRET_KEY']
+STRIPE_PUBLISHABLE_KEY = os.environ['STRIPE_PUBLISHABLE_KEY']
+STRIPE_WEBHOOK_SECRET = os.environ['STRIPE_WEBHOOK_SECRET']
+STRIPE_CONNECT_WEBHOOK_SECRET = os.environ['STRIPE_CONNECT_WEBHOOK_SECRET']
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
@@ -59,6 +65,7 @@ INSTALLED_APPS = [
     'store',
     'products',
     'cart',
+    'billing',
 ]
 
 REST_FRAMEWORK = {

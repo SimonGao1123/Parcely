@@ -2,6 +2,8 @@ import jwt
 from jwt import PyJWKClient
 from django.conf import settings
 
+from django.db.models import ProtectedError
+
 from accounts.models import AppUser
 import requests
 
@@ -32,17 +34,22 @@ def verify_clerk_token(token: str) -> dict:
 
 # request to clerk api to get user details
 
-def obtain_primary_email(user: dict) -> str:
+def obtain_primary_email(user: dict) -> str | None:
+    """Primary verified email, or None if Clerk has not verified any address.
+
+    Only verified addresses are eligible: AppUser.email is what lets a signed-in
+    buyer skip the OTP gate, so an unverified address reaching it would let
+    someone transact as an email they do not control.
+    """
     primary_id = user.get("primary_email_address_id")
-    emails = user.get("email_addresses", [])
-    for e in emails:
+    verified = [
+        e for e in user.get("email_addresses", [])
+        if (e.get("verification") or {}).get("status") == "verified"
+    ]
+    for e in verified:
         if e["id"] == primary_id:
             return e["email_address"]
-    else:
-        if emails:
-            return emails[0]["email_address"]
-        else:
-            raise ValueError("No email addresses found")
+    return verified[0]["email_address"] if verified else None
 
 CLERK_API_BASE = "https://api.clerk.com/v1"
 
@@ -63,8 +70,12 @@ def fetch_clerk_user(clerk_id: str) -> dict:
 def update_clerk_user(clerk_id: str, data: dict) -> AppUser | None:
     user = AppUser.objects.filter(clerk_id=clerk_id).first()
     if user is None:
-        return None
-    user.email = obtain_primary_email(data)
+        # Skipped at user.created for having no verified address; this update is
+        # the first point the account becomes usable.
+        return create_clerk_user(clerk_id, data)
+    email = obtain_primary_email(data)
+    if email is not None:
+        user.email = email
     user.profile_picture = data.get("image_url")
     user.username = data.get("username")
     user.first_name = data.get("first_name")
@@ -72,11 +83,14 @@ def update_clerk_user(clerk_id: str, data: dict) -> AppUser | None:
     user.save()
     return user
 
-def create_clerk_user(clerk_id: str, data: dict) -> dict:
+def create_clerk_user(clerk_id: str, data: dict) -> AppUser | None:
+    email = obtain_primary_email(data)
+    if email is None:
+        return None
     user, _ = AppUser.objects.get_or_create(
         clerk_id=clerk_id,
         defaults={
-            "email": obtain_primary_email(data),
+            "email": email,
             "profile_picture": data.get("image_url", None),
             "username": data.get("username"),
             "first_name": data.get("first_name"),
@@ -86,4 +100,9 @@ def create_clerk_user(clerk_id: str, data: dict) -> dict:
     return user
 
 def delete_clerk_user(clerk_id: str) -> None:
-    AppUser.objects.filter(clerk_id=clerk_id).delete()
+    try:
+        AppUser.objects.filter(clerk_id=clerk_id).delete()
+    except ProtectedError:
+        # Seller still has Customers - their purchase history and live
+        # subscriptions outlive the Clerk account.
+        AppUser.objects.filter(clerk_id=clerk_id).update(is_active=False)
