@@ -19,10 +19,13 @@ from django.urls import path, include
 from accounts import urls as accounts_urls
 from accounts import views as accounts_views
 from store import urls as store_urls
+from billing.views.stripeWebhooks import stripe_platform_webhook
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include(accounts_urls)),
     path('s3/', include('s3.urls')),
-    path('clerk/webhook/', accounts_views.clerk_webhook, name='clerk_webhook'),
+    path('billing/', include('billing.urls')),
+    path('webhooks/clerk/', accounts_views.clerk_webhook, name='clerk_webhook'),
+    path('webhooks/stripe/platform/', stripe_platform_webhook, name='stripe_platform_webhook'),
     path('storefronts/', include(store_urls)),
 ]

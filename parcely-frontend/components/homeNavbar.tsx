@@ -26,6 +26,10 @@ export default function HomeNavbar() {
                     <Button variant="outline" onClick={() => router.push("/personal")}>
                         My storefronts
                     </Button>
+                    {/* /profile redirects home when signed out, so it needs no guard either */}
+                    <Button variant="outline" onClick={() => router.push("/profile")}>
+                        Profile
+                    </Button>
                 </div>
                 <AuthControl className="text-sm transition-colors hover:text-stone-950" />
             </nav>

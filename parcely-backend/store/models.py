@@ -82,6 +82,16 @@ class StoreFront(TimestampedModel):
     
     def clean(self): # checks if homepage referencing is actually part of storefront
         super().clean()
+        # Creation only. A seller whose capability later degrades to `restricted`
+        # must keep editing and unpublishing the storefronts they already own -
+        # gating every save would strand them behind a transient Stripe state.
+        #
+        # owner_id, not owner: full_clean() still calls clean() after
+        # clean_fields() has collected errors, so on a missing owner `self.owner`
+        # would raise RelatedObjectDoesNotExist and surface as a 500.
+        if self._state.adding and self.owner_id and not self.owner.can_sell:
+            raise ValidationError("Finish Stripe onboarding before creating a storefront.")
+
         if self.homepage and self.homepage.storefront_id != self.pk:
             raise ValidationError("Homepage must belong to this storefront")
         # a product page is hidden from the navbar, so it would be a homepage

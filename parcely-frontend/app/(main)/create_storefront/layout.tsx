@@ -6,5 +6,10 @@ export default async function CreateStorefrontLayout({ children }: { children: R
     if (!me) {
         redirect("/sign-in"); // must be signed in
     }
+    // StoreFront.clean() refuses to create one anyway; this sends the seller
+    // somewhere they can act instead of letting the form fail on submit.
+    if (!me.can_sell) {
+        redirect("/profile");
+    }
     return children;
 }

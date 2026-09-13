@@ -7,7 +7,9 @@ export function formatErrors(body: unknown, fallback: string): string {
     return entries
         .map(([field, messages]) => {
             const text = Array.isArray(messages) ? messages.join(" ") : String(messages);
-            return field === "detail" ? text : `${field}: ${text}`;
+            // __all__ is where Django puts a model's non-field ValidationErrors,
+            // so prefixing it would surface the literal "__all__: ..." to users.
+            return field === "detail" || field === "__all__" ? text : `${field}: ${text}`;
         })
         .join("\n");
 }

@@ -3,7 +3,7 @@ from store.models import StoreFront, Page, PageBlock
 from s3.models import Blob
 from s3.serializers import BlobSerializer
 from accounts.models import AppUser
-from accounts.serializers import AppUserSerializer
+from accounts.serializers import PublicOwnerSerializer
 
 class PageSummarySerializer(serializers.ModelSerializer):
     logo_image = BlobSerializer(read_only=True)
@@ -24,7 +24,7 @@ class StoreFrontSummarySerializer(serializers.ModelSerializer):
     # just doesn't include all pages, only includes homepage summary
     logo_image = BlobSerializer(read_only=True)
     banner_image = BlobSerializer(read_only=True)
-    owner = AppUserSerializer(read_only=True)
+    owner = PublicOwnerSerializer(read_only=True)
     logo_image_id = serializers.PrimaryKeyRelatedField(
         queryset=Blob.objects.all(), source="logo_image", write_only=True,
         required=False, allow_null=True,
@@ -56,7 +56,7 @@ class StoreFrontSummarySerializer(serializers.ModelSerializer):
 class StoreFrontSerializer(serializers.ModelSerializer):
     logo_image = BlobSerializer(read_only=True)
     banner_image = BlobSerializer(read_only=True)
-    owner = AppUserSerializer(read_only=True)
+    owner = PublicOwnerSerializer(read_only=True)
     pages = PageSummarySerializer(many=True, read_only=True)
 
     logo_image_id = serializers.PrimaryKeyRelatedField(

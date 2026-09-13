@@ -1,7 +1,19 @@
 from django.db import models
 from common.models import TimestampedModel
 from django.core.exceptions import ValidationError
+from datetime import datetime, timedelta
+from django.utils import timezone
 # Create your models here.
+
+
+class CardPaymentsStatus(models.TextChoices):
+    """Mirrors Stripe's card_payments capability status verbatim - values are
+    assigned straight from the API response, so they must not diverge."""
+    ACTIVE = "active", "Active"
+    PENDING = "pending", "Pending"
+    RESTRICTED = "restricted", "Restricted"
+    UNSUPPORTED = "unsupported", "Unsupported"
+
 
 class AppUser(TimestampedModel):
     email = models.EmailField(unique=True, db_index=True)
@@ -13,8 +25,10 @@ class AppUser(TimestampedModel):
 
     stripe_account_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
 
-    # TODO: add statuses
-    card_payments_status = models.CharField(max_length=255, blank=True, null=True)
+    # Null until a connected account exists - distinct from all four Stripe values.
+    card_payments_status = models.CharField(
+        max_length=255, blank=True, null=True, choices=CardPaymentsStatus.choices
+    )
 
     # Cleared instead of deleting when Clerk sends user.deleted for a seller who
     # still has Customers - PROTECT would otherwise make the webhook retry forever.
@@ -22,6 +36,12 @@ class AppUser(TimestampedModel):
 
     is_authenticated = True
     is_anonymous = False
+
+    @property
+    def can_sell(self) -> bool:
+        """The single definition of the selling gate - checkout must reuse this
+        rather than comparing the status string again."""
+        return self.card_payments_status == CardPaymentsStatus.ACTIVE
 
     class Meta:
         verbose_name = 'User'
@@ -48,6 +68,11 @@ class Customer(TimestampedModel):
             models.UniqueConstraint(fields=["seller", "user"], condition=models.Q(user__isnull=False), name="uniq_customer_seller_user"),
         ]
 
+OTP_TTL = timedelta(minutes=10)
+
+
+def default_expiration_time() -> datetime:
+    return timezone.now() + OTP_TTL
 
 class EmailVerification(TimestampedModel):
     email = models.EmailField()
@@ -56,7 +81,7 @@ class EmailVerification(TimestampedModel):
 
     code_hash = models.CharField(max_length=64)
 
-    expires_at = models.DateTimeField()
+    expires_at = models.DateTimeField(default=default_expiration_time)
 
     consumed_at = models.DateTimeField(null=True, blank=True)
 

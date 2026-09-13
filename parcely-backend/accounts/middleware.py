@@ -11,7 +11,7 @@ class ClerkAuthMiddleware:
     
     def __call__(self, request):
         # Skip auth entirely for webhook endpoints (signed via Svix, no user context).
-        if request.path.startswith('/webhooks/') or request.path.startswith('/clerk/webhook'):
+        if request.path.startswith('/webhooks/') or request.path.startswith('/webhooks/clerk'):
             request.user = AnonymousUser()
             return self.get_response(request)
 

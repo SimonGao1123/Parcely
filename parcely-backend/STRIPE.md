@@ -559,6 +559,13 @@ header-authenticated via Clerk:
 
 ## 6. Webhooks
 
+> **Superseded by [STRIPE_INIT_INTEGRATION.md](STRIPE_INIT_INTEGRATION.md) for the
+> platform endpoint.** The implemented endpoint is `/webhooks/stripe/platform/` and
+> consumes v2 *thin* events, not the v1 `account.updated` described below. Thin events
+> carry no top-level `account` field, so the `Stripe-Account` header discussed in this
+> section is not how the seller is resolved. The Connect endpoint below is still accurate
+> as a design, but is **not yet implemented**.
+
 Connect needs **two endpoints with different signing secrets.** Under direct
 charges, payment events fire on the *connected* account and arrive on the Connect
 endpoint. Account lifecycle events arrive on the platform endpoint.

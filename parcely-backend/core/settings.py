@@ -37,6 +37,9 @@ STRIPE_PUBLISHABLE_KEY = os.environ['STRIPE_PUBLISHABLE_KEY']
 STRIPE_WEBHOOK_SECRET = os.environ['STRIPE_WEBHOOK_SECRET']
 STRIPE_CONNECT_WEBHOOK_SECRET = os.environ['STRIPE_CONNECT_WEBHOOK_SECRET']
 
+# Base for Stripe AccountLink refresh_url / return_url.
+FRONTEND_URL = os.environ['FRONTEND_URL']
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
@@ -176,11 +179,16 @@ STATIC_URL = 'static/'
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
+# Development only: every message lands as a .log file instead of being sent.
+# Production swaps BACKEND for smtp.EmailBackend with host/port OPTIONS.
 MAILERS = {
     'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+        'BACKEND': 'django.core.mail.backends.filebased.EmailBackend',
+        'OPTIONS': {'file_path': BASE_DIR / 'tmp' / 'emails'},
     },
 }
+
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@parcely.local')
 
 STORAGES = {
     'default': {

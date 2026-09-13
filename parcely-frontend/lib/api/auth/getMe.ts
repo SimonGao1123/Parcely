@@ -1,5 +1,7 @@
 import { apiFetch } from "@/lib/api.server";
-export async function getMe() {
+import type { Me } from "@/types/user";
+
+export async function getMe(): Promise<Me | null> {
     const response = await apiFetch("/accounts/me/");
     if (!response.ok) {
         return null;
