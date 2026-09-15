@@ -41,3 +41,12 @@ class PublicOwnerSerializer(serializers.ModelSerializer):
         model = AppUser
         fields = ['id', 'first_name', 'profile_picture']
         read_only_fields = fields
+
+class VerifyEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.CharField()
+
+    def validate_email(self, value):
+        # Must match the normalization in SendOTPEmailSerializer, since the row
+        # is looked up by the address as it was stored at send time.
+        return value.lower()

@@ -8,7 +8,7 @@ from store.views import (
 )
 from store.views.page import PageListAPIView, PageDetailAPIView, CreatePageAPIView, UpdatePageAPIView, DeletePageAPIView
 from store.views.pageblock import PageBlockCreateAPIView, PageBlockUpdateAPIView, PageBlockDeleteAPIView, PageBlockLayoutAPIView, PageBlockBatchAPIView
-from accounts.views import SendOTPEmailAPIView
+from accounts.views import SendOTPEmailAPIView, VerifyEmailAPIView
 from products import urls as products_urls
 from cart import urls as cart_urls
 urlpatterns = [
@@ -41,4 +41,5 @@ urlpatterns = [
 
     # checkout related urls
     path('<str:storefront_slug>/checkout/send-otp/', SendOTPEmailAPIView.as_view(), name='send-otp-email'),
+    path('<str:storefront_slug>/checkout/verify-email/', VerifyEmailAPIView.as_view(), name='verify-email'),
 ]

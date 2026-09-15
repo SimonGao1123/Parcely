@@ -4,9 +4,8 @@ from django.conf import settings
 
 from django.db.models import ProtectedError
 
-from accounts.models import AppUser
+from accounts.models import AppUser, Customer
 import requests
-
 # JWKS endpoint, clerk exposes per app
 # format: https://<app-domain>.clerk.accounts.dev/.well-known/jwks.json
 # Get from clerk dashboard, API Keys -> Application -> JWKS URL
@@ -97,6 +96,11 @@ def create_clerk_user(clerk_id: str, data: dict) -> AppUser | None:
             "last_name": data.get("last_name")
         }
     )
+    # Adopt the guest rows this person left behind before signing up. iexact
+    # because Clerk hands back the address as typed while Customer.email is
+    # lowercased at verification time, and user__isnull so a row already owned
+    # by someone else can never be reassigned.
+    Customer.objects.filter(email__iexact=email, user__isnull=True).update(user=user)
     return user
 
 def delete_clerk_user(clerk_id: str) -> None:
