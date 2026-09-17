@@ -19,7 +19,7 @@ from django.urls import path, include
 from accounts import urls as accounts_urls
 from accounts import views as accounts_views
 from store import urls as store_urls
-from billing.views.stripeWebhooks import stripe_platform_webhook
+from billing.views.stripeWebhooks import stripe_connect_webhook, stripe_platform_webhook
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include(accounts_urls)),
@@ -27,5 +27,8 @@ urlpatterns = [
     path('billing/', include('billing.urls')),
     path('webhooks/clerk/', accounts_views.clerk_webhook, name='clerk_webhook'),
     path('webhooks/stripe/platform/', stripe_platform_webhook, name='stripe_platform_webhook'),
+    # Separate route because the signing secret differs and a route verifies against
+    # exactly one. Payment events under direct charges land here.
+    path('webhooks/stripe/connect/', stripe_connect_webhook, name='stripe_connect_webhook'),
     path('storefronts/', include(store_urls)),
 ]

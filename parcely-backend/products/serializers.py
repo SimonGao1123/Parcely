@@ -8,7 +8,17 @@ from store.serializers import StoreFrontSerializer
 class PlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = Plan
-        fields = '__all__'
+        # Explicit rather than '__all__', which would expose stripe_product_id and
+        # stripe_price_id. They are nested into public page blocks via
+        # ProductSummarySerializer, and worse, '__all__' makes them writable: a
+        # seller could point a plan at a Price that disagrees with price_cents,
+        # and since the cart totals price_cents while checkout builds line_items
+        # from stripe_price_id, the buyer would be charged a different amount than
+        # they were shown.
+        fields = [
+            'id', 'title', 'product', 'price_cents', 'billing_interval',
+            'billing_interval_count', 'trial_period_days', 'created_at', 'updated_at',
+        ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'product'] # cant change product id, can only change other fields
 
 # NOT NEEDED CURRENTLY, DEPRECATED

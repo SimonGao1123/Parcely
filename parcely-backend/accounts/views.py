@@ -86,6 +86,10 @@ class SendOTPEmailAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data['email']
 
+        if request.user.is_authenticated and request.user.email.lower() != email:
+            return Response({"error": "You are not authorized to verify this email address."}, status=status.HTTP_403_FORBIDDEN)
+            # if you are logged in MUST verify with logged in email
+        
         # An address that already belongs to an account may only be verified by
         # whoever is signed in as it, otherwise a guest could transact as them.
         # iexact because AppUser.email is stored verbatim from Clerk, so a case

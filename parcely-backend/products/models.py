@@ -86,4 +86,21 @@ class Plan(TimestampedModel):
     
     class Meta:
         unique_together = ("product", "billing_interval", "billing_interval_count", "price_cents")
+        constraints = [
+            # Partial because most rows are null until the plan is pushed, and
+            # nulls would otherwise collide with each other.
+            models.UniqueConstraint(
+                fields=["stripe_price_id"],
+                condition=models.Q(stripe_price_id__isnull=False),
+                name="uniq_plan_stripe_price_id",
+            ),
+            # 1:1 by construction - each plan gets its own Stripe Product - so this
+            # catches a resync bug pointing two plans at one prod_ before the two
+            # start overwriting each other's name.
+            models.UniqueConstraint(
+                fields=["stripe_product_id"],
+                condition=models.Q(stripe_product_id__isnull=False),
+                name="uniq_plan_stripe_product_id",
+            ),
+        ]
 

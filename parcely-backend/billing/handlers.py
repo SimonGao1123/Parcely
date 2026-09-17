@@ -109,3 +109,19 @@ _HANDLERS = {
 
 def handler_for(event_type: str):
     return _HANDLERS.get(event_type)
+
+
+# Kept apart from _HANDLERS rather than merged into it. These keys are v1 snapshot
+# type strings from the Connect endpoint, and sharing one namespace with the v2
+# thin-event types above invites reading `account.updated` as `v2.core.account.*` -
+# two different payload shapes behind names that differ by a prefix.
+#
+# Empty on purpose. Fulfilment needs Order / Payment / Subscription, which do not
+# exist yet, and an unhandled type already falls through to being recorded with
+# processed_at set. Recording first is what makes those models designable against
+# observed payloads.
+_CONNECT_HANDLERS = {}
+
+
+def connect_handler_for(event_type: str):
+    return _CONNECT_HANDLERS.get(event_type)
