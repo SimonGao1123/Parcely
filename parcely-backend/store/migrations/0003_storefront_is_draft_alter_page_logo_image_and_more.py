@@ -2,7 +2,7 @@
 
 import django.db.models.deletion
 import store.models
-import store.validators
+import store.blocks.validators
 from django.db import migrations, models
 
 
@@ -27,6 +27,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='pageblock',
             name='style',
-            field=models.JSONField(default=store.models.default_page_block_style, validators=[store.validators.validate_page_block_style]),
+            field=models.JSONField(default=store.models.default_page_block_style, validators=[store.blocks.validators.validate_page_block_style]),
         ),
     ]

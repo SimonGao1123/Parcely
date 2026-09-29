@@ -3,7 +3,7 @@ from django.conf import settings
 
 from accounts.models import AppUser
 
-# The one client in the process - billing.views.stripeWebhooks imports this rather
+# The one client in the process - billing.webhooks.views imports this rather
 # than building a second.
 _client = stripe.StripeClient(settings.STRIPE_SECRET_KEY)
 

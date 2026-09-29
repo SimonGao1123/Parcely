@@ -1,18 +1,44 @@
-# Stripe Integration Design
+# Stripe Integration
 
-Status: **design only — no Stripe code exists yet.** `accounts/models.py` still
-carries the placeholder TODO. Sandbox is provisioned, Stripe CLI installed, and
-Accounts v2 creation has been verified end to end against Parcely's exact config.
+What exists today and why it is shaped this way. Design that has not been built is
+out of scope here — where a decision is settled but unwritten, it is marked.
+
+```
+BUILT                                      NOT BUILT
+─────────────────────────────────          ──────────────────────────────
+Connect onboarding (Accounts v2)           Read endpoints (no serializers.py)
+Platform webhook  (v2 thin events)         Success-page session lookup
+Connect webhook   (v1, fulfilling)         Subscription cancellation
+Catalog sync      (Plan → prod_ + price_)  Frontend checkout (no is_subscription
+Email OTP + buyer session token              branch — add-to-cart 400s on plans)
+Checkout endpoints (cart + subscription)   Customer Portal / manage purchases
+Fulfilment handlers (9 events)             Real email backend (console only)
+Capacity reservation (SubscriptionCheckout) Platform revenue (no application fee)
+Payment / Subscription / Order models      Tax, refunds, disputes
+```
+
+Nothing below has been exercised against live Stripe test mode end to end. The
+handlers are verified by construction and against synthetic payloads; scenarios
+1–4 and 9–10 of the fulfilment plan remain unrun.
+
+Companion docs carry the implementation detail and the open-gap lists:
+
+- **`STRIPE_INIT_INTEGRATION.md`** — onboarding, the platform endpoint, v2 thin
+  event shapes, account statuses. Authoritative for anything account-lifecycle.
+- **`STRIPE_CATALOG_SYNC.md`** — `products/stripe_catalog.py`, the Connect
+  endpoint's origins, and the numbered list of known vulnerabilities still open.
+
+---
 
 ## Core assumptions
 
 1. **Stripe Connect with Accounts v2.** Sellers are connected accounts created via
    `POST /v2/core/accounts`. The v1 `type: "express" | "standard" | "custom"`
-   model is deprecated and Stripe now errors on it for new integrations.
+   model is deprecated and Stripe errors on it for new integrations.
 2. **The seller is an `AppUser`, not a `StoreFront`.** A seller is a legal entity
    that gets paid; one person running three storefronts is one connected account.
-3. **Direct charges.** The seller is merchant of record. Parcely's cut is an
-   application fee.
+3. **Direct charges.** The seller is merchant of record, and is therefore liable
+   for disputes and refunds. The buyer's statement shows the seller's descriptor.
 4. **Every buyer verifies their email.** One-time purchases included. There is no
    unverified purchase path.
 5. **A Clerk account is optional.** Login is not required to buy. It only links
@@ -35,8 +61,9 @@ sellers run their own stores and own their buyers — which is the SaaS shape, n
 the marketplace shape. And `express` combined with `losses_collector: "stripe"`
 is rejected by the API outright.
 
-Gate selling on `configuration.merchant.capabilities.card_payments.status ==
-"active"`. `charges_enabled` and `payouts_enabled` are deprecated v1 fields.
+Selling is gated on `configuration.merchant.capabilities.card_payments.status ==
+"active"`, mirrored locally as `AppUser.card_payments_status`. `charges_enabled`
+and `payouts_enabled` are deprecated v1 fields and are not read.
 
 ---
 
@@ -47,90 +74,56 @@ mapping between them is the whole integration.
 
 ### 1.1 Local models
 
-```
-IDENTITY                                      CATALOG
-══════════════════════════                    ══════════════════════════════
-
-┌────────────────────────────┐   owner   ┌────────────────────────────┐
-│ AppUser                    │──────────►│ StoreFront                 │
-│   clerk_id                 │           │   currency                 │
-│   email                    │           └─────────────┬──────────────┘
-│   stripe_account_id   ★NEW │                         │ storefront
-│   card_payments_status★NEW │                         ▼
-└──────────┬─────────────────┘           ┌────────────────────────────┐
-           │ seller                      │ Product                    │
-           │                             │   is_subscription          │
-           │        ┌────────────────────│   max_capacity             │
-           │        │                    │   NOT SYNCED TO STRIPE     │
-           │        │                    └─────────────┬──────────────┘
-           │ user   │                                  │ product
-           │ (NULL- │                                  ▼
-           │  ABLE) │                    ┌────────────────────────────┐
-           │        │                    │ Plan                       │
-           ▼        ▼                    │   price_cents              │
-┌────────────────────────────┐           │   billing_interval         │
-│ Customer              ★NEW │           │   billing_interval_count   │
-│   seller  ──► AppUser      │           │   trial_period_days        │
-│   user    (nullable)       │           │   stripe_product_id   ★NEW │
-│   email                    │           │   stripe_price_id     ★NEW │
-│   email_verified_at        │           └──────┬──────────────┬──────┘
-│   stripe_customer_id       │                  │              │
-│   default_pm_brand         │            plan  │              │ plan
-│   default_pm_last4         │                  │              │
-└───┬────────────────────┬───┘                  │              │
-    │ customer           │ customer             │              │
-    ▼                    ▼                      │              │
-```
+Relationships only — field lists live in `models.py` and drift if duplicated.
 
 ```
-PURCHASE (one-time)              RECURRING                 CART (pre-purchase)
-═══════════════════════          ══════════════════        ═══════════════════
+CATALOG                                  IDENTITY
+StoreFront ──► Product ──► Plan          AppUser ──► Customer
+ (currency)   (is_subscription,           (seller)    (verified email;
+               max_capacity)                           cus_ minted lazily)
+                                              │ owner
+CART — one-time lines ONLY                    ▼
+Cart ──► CartItem ──► Plan                StoreFront
+         CartItem.clean() refuses a plan whose product is_subscription
 
-┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
-│ Order           ★NEW │  │ Subscription    ★NEW │  │ Cart                 │
-│   ONE PER PLAN       │  │   ONE PER PLAN       │  │   storefront         │
-│   plan ──────────────┼┐ │   customer           │  │   user     (nullable)│
-│   quantity           ││ │   plan ──────────────┼┐ │   public_session_id  │
-│   unit_price_cents   ││ │   stripe_sub_id      ││ └──────────┬───────────┘
-│      (SNAPSHOT)      ││ │   status             ││            │ cart
-│   stripe_price_id    ││ │   current_period_end ││            ▼
-│      (SNAPSHOT)      ││ │   cancel_at_period_  ││ ┌──────────────────────┐
-│   payment ───────┐   ││ │     end              ││ │ CartItem             │
-└──────────────────┼───┘│ │   unit_price_cents   ││ │   plan ──────────────┼┐
-                   │    │ │      (SNAPSHOT)      ││ └──────────────────────┘│
-     N Orders ─────┤    │ │   stripe_price_id    ││                         │
-     share ONE     │    │ │      (SNAPSHOT)      ││                         │
-     Payment       │    │ └──────────┬───────────┘│                         │
-                   │    └────────────┼────────────┴─────────────────────────┘
-                   ▼                 │ subscription   (all point to Plan)
-    ┌────────────────────────────────┐│ (1 Subscription : N Payments)
-    │ Payment                   ★NEW │◄┘
-    │   customer      NOT NULL       │
-    │   kind: onetime | recurring    │
-    │   subscription    (nullable)   │  set iff kind = recurring
-    │   stripe_checkout_session_id   │  (nullable — renewals have none)
-    │   stripe_payment_intent_id     │
-    │   stripe_invoice_id (nullable) │
-    │   amount_cents, currency       │
-    │   status                       │
-    └────────────────────────────────┘
-      one row per CHARGE — initial AND every renewal.
-      Grouping entity for one-time purchases:
-      a 3-plan cart = 3 Order rows, 1 Payment, 1 charge.
+IN FLIGHT
+SubscriptionCheckout ──► Customer, Plan   a buyer on Stripe's page holding a
+                                          capacity slot; expires_at IS the release
+
+MONEY — written by webhooks only, after the money has moved
+                                              cardinalities
+    Payment ◄──── Order ────► Plan            1 Payment : N Order
+   (money only,     │                         1 Order   : 0–1 Subscription
+    no status)      └──► Subscription ──► Plan
+                         (maps to si_,        1 Subscription : N Order
+                          not sub_)             one per billed period
+
+    Customer is a direct FK on all four, so "this buyer's history"
+    is one indexed read rather than a join through Payment.
 
 INFRASTRUCTURE
-══════════════
-┌──────────────────────────┐   ┌──────────────────────────────┐
-│ StripeEvent         ★NEW │   │ EmailVerification       ★NEW │
-│   stripe_event_id UNIQUE │   │   email, seller              │
-│   stripe_account_id      │   │   code_hash, expires_at      │
-│   type, processed_at     │   │   consumed_at, attempts      │
-└──────────────────────────┘   └──────────────────────────────┘
-   webhook idempotency          issues the OTP at checkout AND
-                                on return. No second credential
-                                type: on success the view sets
-                                request.session["customer_id"].
+StripeEvent  webhook idempotency (stripe_event_id UNIQUE)
+EmailVerification  issues the OTP; the view returns a signed header
+                   token on success, not a session cookie (§4)
 ```
+
+Four things in that diagram are load-bearing and easy to misread:
+
+- **`Order` is one billed line on one `Payment`**, not one shopping action. It
+  covers one-time lines and subscription lines alike, so a renewal is a `Payment`
+  carrying a single `Order`. Because every line has a row,
+  `sum(unit_price_cents × quantity) == payment.amount_cents` holds for every
+  payment with no special case — including a $0 trial period, which is recorded
+  rather than inferred from an amount of zero.
+- **`Payment` has no `status`.** Rows exist only for money that moved. A failed
+  renewal would need a row carrying the same `stripe_invoice_id` as the retry that
+  later succeeds, colliding with the unique index. Failures stay legible through
+  `StripeEvent` and `Subscription.status`.
+- **`Subscription` maps to a Stripe `SubscriptionItem` (`si_`)**, not a
+  `Subscription` (`sub_`). See §3.3.
+- **`SubscriptionCheckout` is not money.** It is a lease on a capacity slot,
+  CASCADE on both FKs where the money graph is PROTECT, and it is deleted the
+  moment the subscription it was holding a seat for is written.
 
 ### 1.2 Stripe-side objects
 
@@ -146,13 +139,12 @@ Account (acct_...)                       ← one per SELLER (AppUser)
 │
 ├── Customer (cus_...)                   ← one per (seller, verified email)
 │     │
-│     ├── PaymentMethod (pm_...)         ← saved card. attached = reusable
-│     │     └── invoice_settings.default_payment_method
+│     ├── PaymentMethod (pm_...)         ← saved card
 │     │
-│     ├── Subscription (sub_...)         ← one per Plan (see §4)
+│     ├── Subscription (sub_...)         ← at most ONE per Checkout Session
 │     │     └── SubscriptionItem (si_...) ──► Price
-│     │           ↑ Stripe allows many; we always create exactly one,
-│     │             so we don't mirror this table locally
+│     │           ↑ N possible per sub_; today always 1. This is the level
+│     │             we mirror. See §3.3.
 │     │
 │     └── Invoice (in_...)               ← generated per cycle by Stripe
 │           └── PaymentIntent (pi_...)
@@ -165,6 +157,22 @@ Account (acct_...)                       ← one per SELLER (AppUser)
             └── Charge (ch_...)
 ```
 
+The chain matters because each link is a different state machine:
+
+```
+Subscription (sub_)   the agreement — a schedule, holds no money
+Invoice (in_)         the bill — line items, what is owed
+PaymentIntent (pi_)   the attempt — 3DS, retries
+Charge (ch_)          the movement — refunds and disputes attach here
+```
+
+One-time payments skip the top two entirely; Stripe creates no invoice for a
+`mode: "payment"` session. And **a trialing subscription's first invoice is $0,
+marked `paid`, and has no PaymentIntent at all** — a handler that assumes
+`invoice.payments` is populated crashes on every trial signup.
+`_invoice_payment_intent()` in `billing/webhooks/fulfilment.py` returns `None`
+there by design.
+
 Three structural facts that drive the rest of this document:
 
 - **`Customer` and `PaymentMethod` are scoped to a single account.** A card saved
@@ -173,52 +181,51 @@ Three structural facts that drive the rest of this document:
 - **`Price` is immutable.** Editing a price means creating a new `Price` and
   archiving the old one. Existing subscribers keep billing on the old one.
 - **Invoices and Checkout render the Product name, never the Price.** This is the
-  entire reason for the mapping in §2.1.
+  entire reason for the mapping in §2.
+
+### SDK note — fields removed in `stripe==15.6.1`
+
+Anything written against older examples will break. Verified against the
+installed package, not the docs:
+
+```
+invoice.subscription     GONE → invoice.parent.subscription_details.subscription
+invoice.charge           GONE
+invoice.payment_intent   GONE → invoice.payments.data[0].payment.payment_intent
+```
+
+`current_period_end` likewise moved off `Subscription` onto `SubscriptionItem`.
+
+Two more that cost real debugging time:
+
+- **`Session.line_items` is `Optional` and absent from the webhook payload.** It
+  must be fetched: `_client.v1.checkout.sessions.line_items.list(...)`. There is
+  no `list_line_items` method on the service — it is the `line_items` sub-service.
+- **`metadata` is a `StripeObject`, not a dict.** `.get()` raises on it. Use
+  `getattr(obj.metadata, key, None)`; `_meta()` wraps this.
 
 ---
 
-## 2. Mapping table
+## 2. Catalog: `Plan` → Stripe `Product` + `Price`
 
-| Local model | Stripe object | ID field | Created by | Source of truth |
-|---|---|---|---|---|
-| `AppUser` (seller) | `Account` v2 | `stripe_account_id` | Connect onboarding | Stripe |
-| `Product` | — | — | — | local only |
-| `Plan` | `Product` + `Price` | `stripe_product_id`, `stripe_price_id` | us, on save | **us** (push) |
-| `Customer` | `Customer` | `stripe_customer_id` | us, after verification | **us** (push) |
-| — (card) | `PaymentMethod` | not stored; brand/last4 cached | Stripe-hosted Checkout | Stripe (pull) |
-| `Subscription` | `Subscription` | `stripe_subscription_id` | Checkout Session | Stripe (webhook) |
-| `Order` | line item | `stripe_price_id` snapshot | us, at checkout | **us** |
-| `Payment` | `PaymentIntent` / `Invoice` | `stripe_payment_intent_id`, `stripe_invoice_id` | Stripe | Stripe (webhook) |
-| `StripeEvent` | `Event` | `stripe_event_id` | Stripe | Stripe |
-
-`Order` has **no** Stripe counterpart. Stripe has no concept of an order — it has
-charges. `Order` is purely ours: the record of *what was bought*. `Payment` is the
-record of *money moving*, and it is the only one of the two that mirrors a Stripe
-object.
-
-Note the cardinalities run in opposite directions, which is why one table can't
-serve both:
-
-```
-one-time    N Order ──────────► 1 Payment      (one charge, many plans)
-recurring   1 Subscription ◄─── N Payment      (one plan, many renewals)
-```
-
-There is deliberately **no separate "checkout" table**. A cart containing both
-kinds produces one `Payment` plus N `Subscription`s with nothing tying them
-together. The only thing that costs is the ability to say "show me that one
-checkout," and a buyer asking that really wants their receipts — a `Payment`
-query.
+| Local model | Stripe object | ID field | Source of truth |
+|---|---|---|---|
+| `AppUser` (seller) | `Account` v2 | `stripe_account_id` | Stripe |
+| `Product` | — | — | local only |
+| `Plan` | `Product` + `Price` | `stripe_product_id`, `stripe_price_id` | **us** (push) |
+| `Customer` | `Customer` | `stripe_customer_id` | **us** (push, lazy) |
+| `Subscription` | **`SubscriptionItem`** | `stripe_subscription_item_id` | Stripe (webhook) |
+| `Payment` | `CheckoutSession` / `Invoice` / `PaymentIntent` | three nullable columns | Stripe (webhook) |
+| `Order` | invoice or session **line item** | `stripe_price_id` snapshot | Stripe (webhook) |
+| `SubscriptionCheckout` | `CheckoutSession` | `stripe_checkout_session_id` | **us** (local lease) |
+| `StripeEvent` | `Event` | `stripe_event_id` | Stripe |
 
 Rule of thumb: **catalog flows out, money flows in.** We own Product/Price/Customer
 and push changes to Stripe. Stripe owns anything with a payment state, and we only
 learn about it through webhooks — never by trusting a browser callback.
 
-### 2.1 `Plan` → Stripe `Product` + `Price`
-
 Each **`Plan`** becomes its own Stripe Product paired with one Price. The Parcely
-`Product` is never pushed to Stripe; it stays local as grouping and display
-metadata.
+`Product` is never pushed; it stays local as grouping and display metadata.
 
 ```
 Parcely                    Stripe                          Buyer's receipt
@@ -229,53 +236,25 @@ Product "Coffee"    ──►    (not synced)
   Plan Large $25    ──►    Product "Coffee — Large"  ──►   Coffee — Large   $25
 ```
 
-The alternative — Parcely `Product` → Stripe `Product`, `Plan` → `Price` — is the
-obvious mapping and is functionally correct, but every line item on every receipt
-would read `Coffee`, because **the Price name is never displayed** and
-`Price.nickname` is dashboard-internal. Two plans under one product produce
-indistinguishable receipts and no per-plan revenue breakdown in the seller's
-dashboard.
+The obvious alternative — Parcely `Product` → Stripe `Product`, `Plan` → `Price` —
+is functionally correct but makes every receipt line read `Coffee`, because **the
+Price name is never displayed** and `Price.nickname` is dashboard-internal. Two
+plans under one product would produce indistinguishable receipts and no per-plan
+revenue breakdown in the seller's dashboard. Both options cost two ID columns; this
+one just puts them on `Plan`.
 
-Both options cost the same: two ID columns either way, no extra tables. This one
-just puts `stripe_product_id` on `Plan` instead of `Product`.
+Currency comes from the **storefront**, not the plan. Stripe rejects
+mixed-currency invoices, so that centralization is load-bearing, not cosmetic.
 
-Cost of this choice: monthly and annual variants of the same tier appear as two
-Stripe Products rather than one Product with two Prices. That's a deviation from
-Stripe's tier-vs-variant guidance, accepted because the schema has no way to
-distinguish a tier from a billing variant, and the consequence is cosmetic.
+`is_subscription` has no Stripe counterpart. `max_capacity` has none either —
+**Stripe will happily oversell** — so the seat check is enforced entirely locally,
+inside the checkout transaction and before Stripe is called. See §3.4.
 
-| Local | Stripe Product |
-|---|---|
-| `"{product.name} — {plan.title}"`, or `product.name` if `title` is null | `name` |
-| `product.description` | `description` |
-| `product.display_image` (Blob URL) | `images[0]` |
-| `product.is_active` | `active` |
+**`product.display_image` is deliberately not pushed** as `images[0]`. Blob URLs
+are presigned S3 links that expire in 50 minutes, which would rot silently on old
+receipts. Full mapping tables live in `STRIPE_CATALOG_SYNC.md` §2.
 
-| Local | Stripe Price |
-|---|---|
-| `price_cents` | `unit_amount` |
-| `product.storefront.currency` | `currency` |
-| `billing_interval` | `recurring.interval` |
-| `billing_interval_count` | `recurring.interval_count` |
-| `plan.stripe_product_id` | `product` |
-| `trial_period_days` | *not on Price* — passed at Checkout Session create |
-
-`product.is_subscription` has no Stripe counterpart. In Stripe the distinction
-lives on the Price (`recurring` set or not). Our model forbids mixing kinds under
-one product, which is a local constraint — `Product.clean()` already blocks
-flipping the flag under existing plans.
-
-`max_capacity` is likewise ours alone. Stripe will happily oversell; the seat
-check has to happen in our checkout transaction before we call Stripe.
-
-Currency comes from the **storefront**, not the plan. That centralization is what
-makes a cart total a plain sum and guarantees every line item on a Stripe invoice
-shares a currency. Stripe rejects mixed-currency invoices, so this invariant is
-load-bearing, not cosmetic.
-
-### 2.2 The immutability problem
-
-Editing `Plan.price_cents` cannot update the Stripe Price:
+### 2.1 Price immutability — why rows snapshot
 
 ```
 Plan.price_cents 1000 ──► 1200
@@ -289,348 +268,471 @@ Plan.price_cents 1000 ──► 1200
 ```
 
 This is why `Order` and `Subscription` snapshot **both** `unit_price_cents` and
-`stripe_price_id`. Reading price through the `Plan` FK would render last month's
-purchase at today's price, and would lose track of which Stripe Price an existing
-subscriber is actually billed on.
+`stripe_price_id`, and why `Order` snapshots the name. Reading any of it through
+the `Plan` FK would render last month's purchase at today's price and today's
+name. The Stripe **Product** is mutable, so name edits are plain updates — which
+is exactly the drift the snapshot guards against.
 
-Archived prices stay readable forever in Stripe, so nothing breaks — but our rows
-have to remember which one they used. The Stripe **Product** is mutable, so name
-and description edits are plain updates.
+It is also why plan resolution during fulfilment has a second tier. A renewal
+billed against the archived `price_...A` no longer matches `Plan.stripe_price_id`.
+`products/stripe_catalog.py` stamps `plan_id` into every Price's metadata, and
+archiving preserves metadata, so `_plan_by_metadata()` still resolves it. See §5.4.
 
 ---
 
-## 3. Constraints
+## 3. Checkout
+
+Every purchase goes through a **Checkout Session** created on the seller's
+connected account — not the Payment Element. Raw PaymentIntents are reserved for
+off-session charges.
+
+Never pass `payment_method_types`. Omitting it enables dynamic payment methods,
+which Stripe selects and ranks per buyer; hardcoding `["card"]` silently disables
+everything else.
+
+### 3.1 Two endpoints, and why they are not one
+
+```
+POST storefronts/<slug>/checkout/session/        the cart    → mode: "payment"
+POST storefronts/<slug>/checkout/subscription/   one plan    → mode: "subscription"
+```
+
+**Subscriptions never enter the cart.** `CartItem.clean()` refuses any plan whose
+product is `is_subscription`, so a cart is by construction a bag of one-time lines
+and the cart endpoint is unconditionally `mode: "payment"`.
+
+The split is not stylistic. Folded into one endpoint, a single recurring item in a
+five-item cart drags the whole cart into `mode: "subscription"` and puts the other
+four lines on the first invoice — different tax treatment, different refund path,
+and a `Payment` that arrives as `in_` instead of `cs_`. Keeping them apart also
+means the cart path has no capacity check, no trial and no reservation, because
+**the subscription endpoint is the only one that can oversell anything.**
+
+Both share `_BuyerCheckoutAPIView`, which resolves the storefront, re-reads the
+`Customer` scoped to that storefront's owner (never trusting the token payload),
+and refuses a seller whose `can_sell` is false.
+
+### 3.2 One session, one Payment
+
+A cart is always single-storefront, so it never spans two connected accounts.
+
+```
+mode: "payment"        the cart, one-time lines only
+    100 line items max
+    no invoice created → Payment carries cs_ (and pi_), never in_
+    written by checkout.session.completed
+
+mode: "subscription"   exactly one plan today (see 3.3)
+    20 recurring + 20 one-time line items max
+    one-time lines would ride the FIRST INVOICE ONLY
+    → Payment carries in_ (+ pi_, unless the invoice is $0)
+    written by invoice.paid — NOT by checkout.session.completed
+```
+
+`cs_` and `in_` therefore never appear together on one `Payment` row: a
+subscription-mode payment is written from `invoice.paid`, and an Invoice does not
+name the session that started it.
+
+`pi_` is stored on the payment-mode row even though `cs_` already identifies it,
+because **a refund or dispute names the PaymentIntent, never the session.**
+
+### 3.3 Why `Subscription` maps to `si_`
+
+**A Checkout Session creates at most one Stripe Subscription.** N recurring items
+do not produce N `sub_` objects — Stripe merges them into one `sub_` with N
+`SubscriptionItem`s. That is Stripe's behaviour, not a choice.
+
+Today the subscription endpoint accepts exactly one plan, so every `sub_` has
+exactly one `si_`. The `si_` mapping is still the right key, for two reasons that
+do not depend on multi-item carts:
+
+```
+cart: Plan A monthly, Plan B monthly, Plan C yearly   ← hypothetical
+   └─► ONE sub_ ──┬── si_1 ──► price_A     ┐ aligned periods →
+                  ├── si_2 ──► price_B     ┘ one combined invoice
+                  └── si_3 ──► price_C     ← diverges → its own invoice
+```
+
+First, a plan swap within one product replaces the `si_` while keeping the `sub_`,
+so keying on `sub_` would collide on the `(customer, product)` live-uniqueness
+constraint. Second, it costs nothing to be right now and would be a migration
+later. `stripe_subscription_id` is stored but **deliberately not unique**, since
+every item of one subscription shares it.
+
+Mixed intervals are supported under `billing_mode: flexible`, which is now the
+Checkout default — an earlier draft of this document claimed otherwise. Stripe
+emits a combined invoice when item periods align and separate invoices when they
+diverge, so each divergent item reaches us as its own `invoice.paid` → its own
+`Payment` → its own `Order`.
+
+There is no `quantity` on `Subscription`: `CartItem.clean()` caps subscription
+plans at 1, so the column would be the constant 1 on every row.
+
+### 3.4 Capacity — the reservation, and why a lock is not enough
+
+`billing/capacity.py`. `max_capacity` counts live subscribers **plus buyers
+currently sitting on Stripe's hosted page**.
+
+```
+                  ┌── live_subscriber_count(product)   Subscription rows
+consumed = sum ───┤
+                  └── reserved_count(product)          SubscriptionCheckout rows
+                                                       WHERE expires_at > now()
+```
+
+The risky window is not between two concurrent requests — it is between checkout
+and payment. A slot is consumed when the webhook writes the `Subscription`, but
+checked when the session is created, and a buyer can sit on Stripe's page for half
+an hour. **Locking the `Product` row alone does nothing**: two transactions would
+serialize, both read the same live count, both pass, because neither writes
+anything the other could observe. So the reservation is the write, and the lock
+guards it.
+
+```
+RESERVATION_TTL = 30 min   ─── must equal the session's expires_at.
+                               Stripe's floor is 30 min; a longer local lease
+                               would hold a slot after the session died.
+```
+
+Three details that are easy to get wrong:
+
+- **Expiry is the entire release mechanism.** `reserved_count` filters on
+  `expires_at > now()`, so a lapsed reservation stops counting by itself. Nothing
+  sweeps the table.
+- **A live claim is handed back untouched, never extended.** Its deadline is sent
+  to Stripe under an idempotency key; pushing it forward on a double-click would
+  change the parameters behind a key Stripe has already seen, and Stripe rejects
+  the replay rather than returning the session it already made.
+- **The buyer's own reservation is excluded from their own check**, or a
+  `max_capacity=1` product would look full to the very person holding its last
+  slot the moment they retried.
+
+The release happens in the **same transaction** as the `Subscription` write.
+Releasing separately opens a window where the slot is free and the row consuming
+it is not yet committed — another buyer claims a seat already sold.
+
+---
+
+## 4. Buyer identity
+
+The identity is a **verified email**. An `AppUser` is an optional link on top of
+it. Verification is required for every purchase.
+
+```
+① BUY (no account)      email ──► 6-digit code ──► verified
+                             └─ Customer(seller, user=NULL, email_verified_at)
+                                stripe_customer_id stays NULL — cus_ is minted
+                                lazily at Checkout Session time, to keep a
+                                network call out of a lock-holding transaction
+
+② LINK (optional, later) Clerk-verified email == Customer.email
+                             └─ Customer.user = AppUser   ← plain FK set
+                                NO Stripe merge needed; subscriptions, cards
+                                and invoice history carry over untouched
+```
+
+Step ② is why the verification gate earns its friction. **Stripe has no API to
+merge two `Customer` objects.** An unverified throwaway customer would leave a
+buyer who later signs up holding two `cus_...` on one seller — split cards, split
+invoice history, permanently. The claim query filters on `user__isnull=True`,
+which makes it idempotent and stops a second account stealing a linked row.
+
+**Never branch before verification.** Replying "no orders found" before the code
+is checked turns the form into an oracle for who has bought from that storefront.
+Always send, always verify, then render an empty page if there is nothing.
+
+**No magic links.** A token in a URL leaks through access logs, `Referer` headers
+and forwarded mail, and is consumed by corporate link scanners before the buyer
+clicks. Losing an OTP email is never a lockout — a new code can be requested.
+
+### 4.1 Buyer session — a signed header token, not a cookie
+
+`accounts/buyer_session.py`. `django.core.signing` with a dedicated salt and a
+60-minute max age. **No `BuyerSession` table.**
+
+```
+X-Buyer-Session: <signing.dumps({"customer_id", "seller_id"})>
+```
+
+Cookies were rejected: DRF here has no `SessionAuthentication`, so its views are
+effectively csrf_exempt and a cookie credential would need CSRF plumbing,
+`SameSite`/`Secure` config, and would still break on seller custom domains. The
+cart app had already set the precedent with `X-Public-Cart-ID`. The frontend calls
+Django server-side from Next, holding the token in an httpOnly cookie and
+forwarding it as a header, so CORS never applies to it.
+
+No table because the token's only power is creating a Checkout Session for its own
+`Customer`, and the card is entered on Stripe's hosted page — so a stolen token
+buys *for* the victim rather than from them.
+
+The signature proves we minted the token, **not** that we minted it for this
+seller, so `read_buyer_customer` matches `seller_id` against the `Customer` row
+rather than trusting the payload. One seller's token cannot transact on another's
+storefront.
+
+**The token must never be accepted by a "manage purchases" flow** — cancelling a
+subscription, swapping a card, reading invoices. Those are real privileges and
+need a revocable credential or a fresh OTP. This is the single line that makes the
+no-table choice safe.
+
+**`EMAIL_BACKEND` is unset.** OTPs are logged to the console. A provider has to be
+wired up before checkout can ship.
+
+---
+
+## 5. Webhooks
+
+Two endpoints, because the **signing secret and the event version differ** — not
+because one endpoint cannot serve many connected accounts. It can.
+
+```
+billing/webhooks/
+    views.py               both endpoints — verify, record, dispatch
+    account_lifecycle.py   platform registry (5) — writes AppUser
+    fulfilment.py          connect registry  (9) — writes the money graph
+```
+
+```
+/webhooks/stripe/platform/     v2 THIN events, platform secret
+    parse_event_notification() — rejects v1 bodies
+    thin events carry no top-level account;
+    account_lifecycle.account_id_for() digs the acct_ out per event type
+    └─ v2.core.account[configuration.merchant].capability_status_updated
+       v2.core.account[requirements].updated
+       v2.core.account_link.returned
+       v2.core.account.closed          ──► AppUser.card_payments_status
+       v2.core.event_destination.ping  ──► explicit no-op
+
+/webhooks/stripe/connect/      v1 SNAPSHOT events, connect secret
+    construct_event() — v1 events name the account directly on event.account
+    9 handlers, listed in §5.2
+```
+
+The registries are deliberately **not** merged. v2 type strings look like
+`v2.core.account.closed` and v1 ones like `account.updated`; one namespace holding
+both invites reading a v1 event as its v2 near-namesake, and the payload shapes
+are unrelated.
+
+### 5.1 `_record_and_dispatch` and the retry path
+
+Both endpoints share it. The `StripeEvent` row is inserted **before** dispatching,
+so the unique index on `stripe_event_id` is an idempotency gate rather than
+decoration. It is deliberately not wrapped in `transaction.atomic` — `ATOMIC_REQUESTS`
+is unset, so the row commits immediately and survives a handler exception, which is
+the whole point. An outer transaction would roll it back together with the failing
+handler and lose the diagnostic.
+
+**A redelivery re-dispatches unless the event actually finished.** This was a real
+bug: the `except IntegrityError: return 200` arm answered 200 for every retry,
+including retries of events whose handler had raised — so the retry that existed
+to recover the failure discarded it instead, and a raising handler was a permanent
+silent drop.
+
+```
+1st delivery   handler raises   → error set, processed_at NULL, 500
+2nd delivery   IntegrityError   → processed_at is NULL → RE-DISPATCH → 200
+3rd delivery   IntegrityError   → processed_at set     → 200, no re-run
+```
+
+This is why handlers must be idempotent, and why they must **return cleanly rather
+than raise** for data that will never arrive (forged metadata, a deleted plan).
+Raising now loops that event until Stripe gives up. Raising is reserved for faults
+a retry can actually fix — a Stripe 5xx, a deadlock.
+
+Malformed bodies return **200**, not 4xx. A retry replays identical bytes and
+fails identically, so a non-2xx would only buy a multi-day backoff on the whole
+endpoint.
+
+### 5.2 The nine Connect events
+
+Configured in the Stripe Dashboard; nothing in code registers them. `enabled_events`
+**replaces** the array on update, so the full list must be passed.
+
+```
+checkout.session.completed          mode=payment      → Payment + Orders + clear cart
+                                    mode=subscription → sync Subscription,
+                                                        release reservation, NO Payment
+checkout.session.async_payment_succeeded  same payment-mode path, deduped on cs_
+checkout.session.async_payment_failed     nothing — log, leave the cart for a retry
+checkout.session.expired                  delete the reservation, null the cart's cs_
+invoice.paid                              Payment(in_, pi_) + one Order per line
+invoice.payment_failed                    refetch + sync (→ past_due/unpaid). No Payment
+customer.subscription.created             sync
+customer.subscription.updated             sync
+customer.subscription.deleted             status=canceled, ended_at. NEVER delete the row
+```
+
+`customer.subscription.deleted` must not delete: `Order.subscription` is PROTECT,
+and the orders are the billing history.
+
+`payment_intent.*` stays excluded. It carries no line items and so cannot build
+`Order` rows — its only job was flipping `Payment.status`, which no longer exists —
+and it arrives under a different `evt_`, so the `StripeEvent` index would not
+dedupe it against the `checkout.session.*` event for the same money.
+
+`customer.subscription.created` is needed because making subscription creation
+depend on `invoice.paid` is a bet on the trial invoice, and a free trial goes
+straight to `trialing`. It races `invoice.paid` for the same `si_`, which
+`_sync_subscription`'s `update_or_create` on `stripe_subscription_item_id` makes
+safe in either order.
+
+`checkout.session.completed` fires in subscription mode too and **must not write a
+Payment there** — that money arrives as `invoice.paid`, which is also the only
+event carrying `si_`. Fulfilling on both would double-write.
+
+### 5.3 Cross-tenant scoping — the real threat
+
+A connected account can create Checkout Sessions **on its own account with
+arbitrary metadata**, and those events arrive here correctly signed. Trusting
+`metadata.customer_id` on its own would let one seller write a `Payment` against
+another seller's `Customer`.
+
+Every lookup is scoped to `event.account`, and `_customer_for` applies two
+independent checks:
+
+```
+1. join Customer → seller__stripe_account_id == event.account
+2. compare Customer.stripe_customer_id == the cus_ named on the event
+```
+
+Check 2 catches a seller naming a `Customer` that is genuinely theirs while the
+Stripe customer on the event is not. A guard that fails logs a warning and
+**returns** — never raises, per §5.1.
+
+### 5.4 Ordering, resolution, and the one refetch
+
+**Events arrive out of order.** `_sync_subscription` writes Stripe's current state
+absolutely rather than applying a delta, which makes it order-independent: whichever
+of `.created` / `.updated` / `invoice.paid` lands first produces the same rows, and
+a late duplicate overwrites with identical values. Never derive state by
+incrementing from the current row — write `current_period_end = <value from the
+event>`, never `+= interval`.
+
+`invoice.paid` can land before `customer.subscription.created`, and `Order` cannot
+be written without its `Subscription` (PROTECT, plus `Order.clean()` requires the
+plans to match). So: **if any line's `si_` has no local row, refetch the
+subscription and sync it first.** The refetch is gated on that miss, so renewals —
+the overwhelming majority — cost no extra call.
+
+Plan resolution is three account-scoped tiers:
+
+```
+1. Plan.stripe_price_id == price_id
+2. price.metadata.plan_id                    ← survives an archive-and-replace (§2.1)
+3. invoice lines only: line.parent.subscription_item_details.subscription_item
+                                             → the local Subscription's plan
+```
+
+All three failing means the plan is gone but the buyer has paid. **Write the
+`Payment`, skip that `Order`, log an error.** `Order.plan` is non-nullable, so the
+alternative is discarding the payment record entirely. This breaks
+`sum(orders) == amount_cents` for that row, which is the correct alarm — the
+reconciliation query *is* the detector.
+
+**Amounts.** Checkout lines use `price.unit_amount × quantity` (exact). Invoice
+lines use `line.amount // line.quantity`, because the invoice does not restate a
+unit price — exact today, and the first discount or proration is what will make it
+drift.
+
+**Fulfilment happens on webhooks only.** The browser's success callback is not a
+fulfilment signal — a buyer can close the tab before it fires, and it can be forged.
+
+### 5.5 Idempotency raises `ValidationError`, not `IntegrityError`
+
+`Payment`, `Subscription`, `Order` and `SubscriptionCheckout` all call
+`full_clean()` in `save()`, and Django ≥4.1 runs `validate_constraints()` inside
+`full_clean()`. So:
+
+```
+Payment.objects.create(...)        → ValidationError   (full_clean runs first)
+Payment.objects.bulk_create([...]) → IntegrityError    (straight to Postgres)
+```
+
+`_record_and_dispatch` catches `IntegrityError` for the `StripeEvent` dedupe, which
+still works because that row is written without `full_clean()`. Fulfilment handlers
+use `get_or_create` on the Stripe id instead, which is index-backed and also gives
+the `if not created: return` that makes `completed` → `async_payment_succeeded`
+safe: distinct `evt_`s, same `cs_`, second one no-ops.
+
+---
+
+## 6. Constraints
 
 ```
 AppUser:
   stripe_account_id UNIQUE WHERE NOT NULL
 
 Plan:
+  UNIQUE (product, billing_interval, billing_interval_count, price_cents)
   stripe_price_id   UNIQUE WHERE NOT NULL
+  stripe_product_id UNIQUE WHERE NOT NULL   ← 1:1 by construction; catches a
+                                              resync bug before two plans start
+                                              overwriting each other's name
 
 Customer:
   UNIQUE (seller, email)                      ← the real identity
   UNIQUE (seller, user) WHERE user NOT NULL   ← mirrors the Cart idiom
-  CHECK  email_verified_at IS NOT NULL        ← never mint cus_ unverified
-
-Subscription:
-  customer NOT NULL
-  UNIQUE (customer, plan) WHERE status IS ACTIVE
-      ← one live subscription per plan; re-subscribing after cancel is a new row
 
 Payment:
   customer NOT NULL                           ← every purchase is verified
-  CHECK (kind = 'recurring') = (subscription IS NOT NULL)
-      ← a column check, because "does an Order point at me" is not expressible
-        as one. This is the weaker replacement for a true XOR.
-  UNIQUE (stripe_payment_intent_id) WHERE NOT NULL   ← webhook replay safety
+  UNIQUE (stripe_checkout_session_id) WHERE NOT NULL  ┐ three idempotency
+  UNIQUE (stripe_payment_intent_id)   WHERE NOT NULL  ┤ gates, one per
+  UNIQUE (stripe_invoice_id)          WHERE NOT NULL  ┘ arrival shape
+  CHECK  at least one of the three is non-null
+      ← a row naming no Stripe object cannot be reconciled against anything
+
+Subscription:
+  stripe_subscription_item_id UNIQUE      ← the natural key, never null
+  stripe_subscription_id      INDEXED, NOT unique
+  UNIQUE (customer, product) WHERE status IN (active, trialing, past_due, unpaid)
+      ← partial on purpose: an unconditional unique would let a cancelled row
+        occupy the slot forever and permanently bar a resubscribe.
+        Keyed on product, not plan, so a plan swap inside one product collides —
+        which is why _sync_subscription retires vanished si_ rows BEFORE
+        inserting the replacement.
+
+SubscriptionCheckout:
+  UNIQUE (customer, plan)                 ← lapsed rows included, so a returning
+                                            buyer reuses their own dead row rather
+                                            than leaving one per abandoned attempt.
+                                            Cannot be narrowed to live rows only:
+                                            Postgres will not index on now().
+  INDEX (expires_at)
+  CASCADE on both FKs                     ← intent, not money
+
+Order:
+  payment NOT NULL                        ← written after money moves, never before
+  CHECK quantity >= 1                     ← PositiveIntegerField permits 0
 
 StripeEvent:
   UNIQUE (stripe_event_id)
 ```
 
-`Payment.customer` is **NOT NULL** because verification is required for every
-purchase, one-time included. There is no guest-payment path and no second claim
-query.
+`on_delete=PROTECT` throughout the money graph. `Subscription.plan` in particular
+**must** be PROTECT: archiving a Stripe Price does not stop an existing
+subscription, so deleting the `Plan` would leave renewals billing against a
+`price_` that resolves to nothing locally. The delete has to fail instead.
+
+Cross-row rules live in `clean()`, since they are not expressible as CHECKs:
+
+- `Order.customer` must equal `payment.customer`, and if `subscription` is set it
+  must match on both customer and plan.
+- `Subscription.plan.product.is_subscription` must be true, and `ended_at` may
+  only be set once status is `canceled` or `incomplete_expired`. This is why
+  `_sync_subscription` sets `ended_at` conditionally on `ENDED_SUBSCRIPTION_STATUSES`
+  rather than copying it across unconditionally.
 
 `email_verified_at` is what makes account-less checkout safe, **not** the presence
 of an `AppUser`. Because an unverified email can never reach a `cus_...`, nobody
-can type someone else's address and inherit their saved cards or subscriptions —
-and nobody receives an itemised receipt for a purchase they didn't make.
-
-This is the same hazard `Cart.clean()` already guards against: it refuses to let a
-cart have both a user and a session token, so a shared browser can't replay a
-token into a signed-in user's cart. The verification gate is that rule applied to
-payment identity.
-
----
-
-## 4. Checkout
-
-Every purchase goes through a **Checkout Session** created on the seller's
-connected account. Raw PaymentIntents are reserved for off-session charges.
-
-```
-cart ──► verify email (§5) ──► resolve Customer ──► Checkout Session ──► redirect
-                                                                            │
-                                     fulfilment happens ONLY on webhook ◄───┘
-```
-
-Never pass `payment_method_types`. Omitting it enables dynamic payment methods,
-which Stripe selects and ranks per buyer; hardcoding `["card"]` silently disables
-everything else.
-
-### 4.1 Splitting a cart
-
-All one-time items collapse into **one** charge. Each subscription plan becomes
-its **own** Stripe Subscription.
-
-```
-Cart (always single-storefront → never splits across connected accounts)
-├── Plan A   one-time    $20 ×2
-├── Plan B   one-time    $15 ×1
-└── Plan C   monthly     $10 ×1
-         │
-         ├─ ALL one-time items ──► one Payment ──► one charge  $55
-         │                            Order(A, ×2, $20) ┐ both point
-         │                            Order(B, ×1, $15) ┘ at that Payment
-         │
-         └─ subscription plan ──► its own Stripe Subscription
-                  Subscription(customer, Plan C) ──► sub_1   $10/mo
-```
-
-**Row count and charge count are independent.** One `Order` row per plan is
-correct — it is what lets each line carry its own quantity and price snapshot.
-What must *not* happen is one charge per plan. Stripe's fee has a fixed
-per-charge component (~$0.30 US) on top of the percentage, so splitting a 3-item
-cart into 3 charges burns an extra $0.60 and puts 3 lines on the buyer's
-statement for zero benefit.
-
-### 4.2 Session mode
-
-```
-subscriptions in cart │ mode           │ one-time items
-──────────────────────┼────────────────┼──────────────────────────────
-        0             │ "payment"      │ line_items on the session
-        1             │ "subscription" │ line_items on the first invoice
-        2+            │ BLOCKED at cart level
-```
-
-**A Checkout Session creates at most one Subscription.** A cart with two
-subscription plans cannot be one session. The options are N sequential redirects
-(bad — buyers abandon mid-cart, leaving a half-purchased cart), or one session
-followed by off-session subscription creation using the saved card (which risks
-`incomplete` subscriptions when a later charge triggers 3DS).
-
-**Proposed:** cap the cart at one subscription per checkout, enforced in
-`CartItem.clean()` alongside the existing quantity cap. This makes every cart map
-to exactly one session and removes the failure mode entirely. Buying two
-different subscriptions from one storefront in a single checkout is rare enough
-that the constraint is close to free.
-
-⚠ **Not yet verified against the docs.** Confirm that `mode: "subscription"`
-accepts one-time line items on the first invoice before relying on this.
-
-### 4.3 Why subscriptions do not merge
-
-Stripe *would* allow two monthly plans to share one Subscription as two line
-items, saving a charge. We deliberately don't, because **cancellation lifecycle
-is per-plan.** A subscriber cancelling one while keeping the other is routine, and
-on a grouped subscription that becomes an item-removal with proration rather than
-a plain cancel. Independent trials, capacity checks, and `cancel_at_period_end`
-all have the same problem.
-
-This also means `Subscription` is exactly the join table between `Customer` and
-`Plan` — no line-item table beneath it. `CartItem.clean()` already caps
-subscription quantity at 1, so there was never a quantity to store.
-
-Regardless of preference, Stripe will not merge **different intervals** into one
-Subscription, and will not merge across **different connected accounts**. The
-latter is already impossible here — `Cart`'s per-storefront unique constraints
-guarantee a cart never spans two sellers. That constraint is load-bearing for
-payments; keep it.
-
----
-
-## 5. Buyer identity and lifecycle
-
-The identity is a **verified email**. An `AppUser` is an optional link on top of
-it. Verification is required for every purchase.
-
-```
-① BUY (no account) — one-time or subscription, same gate
-   anon browses ──► adds to Cart (public_session_id)
-        │
-        ▼ checkout
-   enter email ──► 6-digit code ──► verified ═══╗
-                                                ║  gate
-   ╔════════════════════════════════════════════╝
-   ║ Customer(seller, user=NULL, email, email_verified_at=now)
-   ║   └─ Stripe Customer created on the seller's connected account
-   ║ Checkout Session ──► card entered ──► PaymentMethod attached
-   ║ webhook ──► Payment / Subscription rows
-   ╚════════════════════════════════════════════════════════════
-
-② RETURN, months later, cookies cleared
-   "Manage purchases" ──► enter email ──► code ──► session cookie
-        └─ resolves (seller, email) ──► same Customer row
-             └─ Stripe Customer Portal: cancel / swap card / invoices
-
-③ LINK AN ACCOUNT (optional, any time)
-   signs up via Clerk, Clerk-verified email == Customer.email
-        └─ Customer.user = AppUser        ← plain FK set, same row
-             └─ NO Stripe merge needed. Subscriptions, cards,
-                invoice history all carry over untouched.
-```
-
-Step ③ is why the verification gate earns its friction. **Stripe has no API to
-merge two `Customer` objects.** If buyers got an unverified throwaway customer, a
-buyer who later signed up would end up with two `cus_...` on one seller — split
-cards, split invoice history, permanently. Verifying up front makes the upgrade a
-metadata update on a row that already exists.
-
-The claim query on sign-in matches every Clerk-verified email on the new account
-against `Customer(email=…, user__isnull=True)`. The `user__isnull` filter is what
-makes it idempotent and stops a second account stealing an already-linked row.
-
-**No magic links.** Step ② was originally a tokenised link emailed to the buyer.
-It was cut: OTP already does the job, and a token in a URL leaks through access
-logs, `Referer` headers and forwarded mail — and gets consumed by corporate link
-scanners (Outlook Safe Links, Proofpoint) before the buyer ever clicks, so a
-single-use link is often already dead on arrival. A 6-digit code has none of
-those failure modes. Losing an email is never a lockout, because the mailbox is
-the credential and a new code can always be requested.
-
-Step ② reuses `EmailVerification` unchanged — same table, same endpoints, same
-`(email, seller)` key. Both paths grant an identical session, so there is no
-privilege difference and no `purpose` column. Only the post-verification redirect
-differs.
-
-**Never branch before verification.** Checking whether an email has a `Customer`
-and replying "no orders found" turns the form into an oracle for who has bought
-from that storefront. Always send the code, always verify, then render an empty
-account page if there is nothing. Rate-limit code *requests* per address and per
-IP: the endpoint is unauthenticated and sends mail, so uncapped it is a relay for
-spamming arbitrary inboxes. `EmailVerification.attempts` caps wrong-code
-guessing, which is a different limit.
-
-The gate also means `public_session_id` is never load-bearing for a purchase. It
-scopes the cart only; the moment money is involved, identity moves to the verified
-email. A cleared cookie loses a cart, never a subscription.
-
-**Prerequisite: Parcely has no email backend.** `core/settings.py` defines no
-`EMAIL_BACKEND`. A provider must be wired up before any checkout can ship.
-
-### 5.1 Buyer session
-
-No custom token model. `django.contrib.sessions` is installed and
-`SessionMiddleware` is active (`core/settings.py:93`), and its cookie already is
-an opaque server-side, revocable, expiring credential — writing another would be
-reimplementing it with fewer eyes on it.
-
-```python
-request.session.cycle_key()                    # session fixation — see below
-request.session["customer_id"] = customer.id
-```
-
-```python
-SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
-SESSION_SAVE_EVERY_REQUEST = True   # sliding expiry
-SESSION_COOKIE_SECURE = True        # NOT the default
-SESSION_COOKIE_SAMESITE = "Lax"
-# SESSION_COOKIE_DOMAIN: leave unset — see below
-```
-
-`cycle_key()` is required because Parcely does not use `django.contrib.auth` for
-buyers, so nothing rotates the key for free. Without it an attacker can plant a
-known `sessionid`, wait for the victim to verify, and inherit the session.
-
-Leaving `SESSION_COOKIE_DOMAIN` unset scopes the cookie to the exact host, so
-`maya.parcely.com` and `devon.parcely.com` get separate sessions automatically —
-the per-seller isolation that `Customer` already implies. Setting it to
-`.parcely.com` would share one session across every storefront, which is a
-cross-merchant leak. The `customer.seller_id == storefront.owner_id` check stays
-as defence in depth, but the cookie scope does the real work.
-
-**No refresh tokens.** They exist to work around unrevocable stateless JWTs;
-these are server-side rows that can be deleted. A lapsed session recovers through
-the same OTP flow, so there is no second code path.
-
-Two consequences of buyers being cookie-authenticated while sellers are
-header-authenticated via Clerk:
-
-- **CSRF becomes live.** Bearer tokens are not sent automatically, so Clerk
-  endpoints are structurally immune; cookies are. `CsrfViewMiddleware` is already
-  enabled (`core/settings.py:95`) and will reject buyer POSTs — cancellation
-  above all — until the token is plumbed through the frontend.
-- **Cross-origin needs care.** `CORS_ALLOW_CREDENTIALS = True` plus
-  `credentials: "include"`. `SameSite` is judged on registrable domain, not port,
-  so `localhost:3000 → localhost:8000` is same-site and works in dev. In
-  production, proxy buyer requests through Next.js route handlers so the browser
-  only talks to the storefront origin; that keeps the cookie first-party even on
-  custom domains. `SameSite=None` is not a fallback — Safari ITP blocks it
-  silently. If the proxy is rejected and the deployment ends up genuinely
-  cross-site, buyer auth moves to an opaque header token and a token model
-  returns in that form.
-- SSR gotcha: `fetch` from a Next.js server component does not inherit browser
-  cookies. Forward the header explicitly or buyer pages render logged-out.
-
----
-
-## 6. Webhooks
-
-> **Superseded by [STRIPE_INIT_INTEGRATION.md](STRIPE_INIT_INTEGRATION.md) for the
-> platform endpoint.** The implemented endpoint is `/webhooks/stripe/platform/` and
-> consumes v2 *thin* events, not the v1 `account.updated` described below. Thin events
-> carry no top-level `account` field, so the `Stripe-Account` header discussed in this
-> section is not how the seller is resolved. The Connect endpoint below is still accurate
-> as a design, but is **not yet implemented**.
-
-Connect needs **two endpoints with different signing secrets.** Under direct
-charges, payment events fire on the *connected* account and arrive on the Connect
-endpoint. Account lifecycle events arrive on the platform endpoint.
-
-```
-Stripe ──► /webhooks/stripe/          (platform)
-             └─ account.updated  ──► AppUser.card_payments_status
-
-Stripe ──► /webhooks/stripe/connect/  (connected accounts)
-             │
-             ├─ verify signature
-             ├─ read Stripe-Account header ──► resolve seller
-             ├─ INSERT StripeEvent(stripe_event_id) ── conflict? → 200, drop
-             │
-             ├─ checkout.session.completed         ──┐ fulfil only when
-             ├─ checkout.session.async_payment_...  ─┤ payment_status != "unpaid"
-             ├─ checkout.session.async_payment_failed
-             │
-             ├─ payment_intent.succeeded      ──► Payment(onetime)   status=paid
-             ├─ payment_intent.payment_failed ──► Payment(onetime)   status=failed
-             ├─ invoice.paid                  ──► Payment(recurring) status=paid
-             │                                    Subscription.current_period_end
-             │                                      = event's period_end (NOT +=)
-             ├─ invoice.payment_failed        ──► Payment(recurring) status=failed
-             │                                    Subscription.status = past_due
-             ├─ customer.subscription.updated ──► sync status / cancel_at_period_end
-             ├─ customer.subscription.deleted ──► Subscription.status = canceled
-             └─ payment_method.attached       ──► cache brand / last4
-```
-
-Every branch that moves money lands in **`Payment`**, by two different routes:
-
-- **One-time.** `Payment` is created at checkout in `pending`, because the `Order`
-  rows need something to point at. The webhook flips its status and fills in the
-  PaymentIntent id.
-- **Renewals.** The webhook creates the `Payment` outright — nothing local
-  initiated it, Stripe just billed the card on schedule.
-
-Either way it is the same table, so "show me this customer's receipts" is one
-query and reconciling against Stripe is a diff rather than an audit.
-
-**Fulfilment happens here only.** The browser's success callback is not a
-fulfilment signal — a buyer can close the tab before it fires, and it can be
-forged.
-
-`checkout.session.completed` fires while the session may still be **unpaid** for
-delayed-notification payment methods. Fulfilling on that event alone grants access
-to payments that later fail, and never fulfils the ones that eventually succeed.
-Check `payment_status` and handle the `async_payment_*` pair.
-
-`StripeEvent` with a unique `stripe_event_id` is not optional. Stripe redelivers
-any event that doesn't get a 2xx, so without the dedupe insert a retried
-`invoice.paid` writes a duplicate `Payment`.
-
-Events arrive **out of order.** Never derive state by incrementing from the
-current row — hence `current_period_end = <value from event>` rather than
-`+= interval`. Write the state the event describes and ignore events older than
-what is stored. Append-only `Payment` rows are immune to this by construction,
-which is a large part of why they beat mutating a status field.
+can type someone else's address and inherit their saved cards or subscriptions.
+This is the same hazard `Cart.clean()` already guards against when it refuses to
+let a cart carry both a user and a session token.
 
 ---
 
 ## 7. Money movement
 
-Direct charges on the connected account, platform cut as an application fee:
+Direct charges on the connected account:
 
 ```
 buyer's card
@@ -638,84 +740,47 @@ buyer's card
     ▼
 Charge on acct_seller              ← funds land in the seller's balance
     │
-    ├─ application_fee ──────────► Parcely balance
     └─ remainder ────────────────► seller balance ──► payout
 ```
 
-- One-time: `application_fee_amount` on the Checkout Session's payment intent data.
-- Recurring: `application_fee_percent` on the Subscription — it applies to every
-  future invoice automatically, so renewals don't need us in the loop.
-
 Because `fees_collector` is `"stripe"`, Stripe bills its processing fees directly
 to the seller, not to Parcely. Because the charge lives on the seller's account,
-**the seller is liable for disputes and refunds**, and the buyer's statement shows
-the seller's descriptor, not Parcely's.
+**the seller is liable for disputes and refunds**.
 
 Stripe's fee is ~2.9% + $0.30 per charge, plus ~0.5% Stripe Billing on recurring.
 The fixed $0.30 is what makes cheap subscriptions expensive: a $3/mo plan pays an
-effective ~13%.
+effective ~13%. It is also why a multi-plan cart must not become one charge per
+plan — splitting a 3-item cart burns an extra $0.60 and puts three lines on the
+buyer's statement for zero benefit.
+
+**Parcely currently takes no cut.** `application_fee_amount` and
+`application_fee_percent` appear nowhere in the codebase. Platform revenue is a
+separate mechanism from `responsibilities` and has not been wired up.
 
 ---
 
-## 8. Implementation order
+## 8. Known gaps in this layer
 
-1. **Plumbing.** `stripe` dependency, `requirements.txt`, four settings keys,
-   `billing` app, one client module pinning the API version.
-2. **Seller onboarding.** `AppUser.stripe_account_id` + `card_payments_status`,
-   v2 account creation, AccountLink, status refresh, selling gate.
-3. **Webhook infrastructure.** `StripeEvent`, signature verification, both
-   endpoints. `account.updated` is the first consumer.
-4. **Catalog sync.** `Plan.stripe_product_id` / `stripe_price_id`, push-on-save,
-   archive-and-recreate on price edits (§2.2).
-5. **Email backend + verification.** Provider, `EmailVerification`, OTP endpoints.
-   Blocks everything below.
-6. **`Customer`** + buyer session (OTP → `request.session`) + the Clerk
-   claim-on-signin hook.
-7. **One-time checkout.** Checkout Session `mode: "payment"`, `Order`, `Payment`,
-   fulfilment webhooks.
-8. **Subscriptions.** `mode: "subscription"`, `Subscription`, lifecycle webhooks,
-   Customer Portal.
-9. **Tax.**
+Ordered by what blocks a working checkout. The catalog-specific list lives in
+`STRIPE_CATALOG_SYNC.md` §8.
 
-Steps 1–7 are worth shipping and testing on their own: that is a complete
-one-time-purchase store. Subscriptions before working webhooks would mean
-silently losing every renewal.
-
----
-
-## 9. Open decisions
-
-- **Mixed cart** (§4.2). Cap at one subscription per checkout — needs doc
-  confirmation that one-time line items ride on a subscription session's first
-  invoice.
-- **Tax.** `automatic_tax` collects nothing and raises no error until the seller
-  has an active registration in the buyer's jurisdiction. Needs a product
-  decision before real money moves.
-- **Refunds.** No local model. `Refund` hangs off `Payment` (the row with the
-  `pi_...`), but seller liability under §7 means the seller may issue refunds in
-  their own Stripe dashboard without telling us — so this is webhook-driven, not
-  UI-driven.
-- **Failed-renewal policy.** Stripe's dunning settings decide when `past_due`
-  becomes `canceled`. Needs a decision on grace period and whether access is cut
-  at `past_due` or at `canceled`.
-- **`max_capacity` enforcement.** The seat check must happen inside the checkout
-  transaction, before calling Stripe. Racing checkouts can oversell otherwise.
-- **Plan deletion.** `Plan` is `on_delete=CASCADE` from `Product`. Deleting a plan
-  with live subscribers needs a guard — the Stripe Subscription would keep billing
-  after our row disappeared.
-- **Physical fulfilment.** No `requires_shipping` flag or address storage. Checkout
-  Sessions can collect shipping addresses natively if needed.
-- **Multiple storefronts, one seller.** A buyer purchasing from two storefronts
-  owned by the same seller now correctly shares one `Customer` and one saved card.
-  Confirm this is desired — it means storefront A's checkout can show a card saved
-  at storefront B.
-- **Storefront domain topology.** §5.1 assumes buyer requests are proxied through
-  Next.js so the session cookie stays first-party. If storefronts stay on
-  `*.parcely.com` subdomains, plain CORS works too. Custom domains without the
-  proxy force buyer auth to a header token instead of a cookie — decide before
-  building the account page.
-- **Shipping notifications.** A seller-triggered "your order shipped" email needs
-  one field, `Payment.fulfilled_at` — `Payment` is the right grain because one
-  checkout and one renewal each map to one shipment, whereas `Order` is per-plan
-  and would fire three emails for one box. No send-log table until bounce state is
-  needed in a query; the mail provider's dashboard covers debugging until then.
+1. **No read endpoints.** `billing/` has no `serializers.py` and no view reads
+   `Order`, `Payment` or `Subscription`. Nothing can show a buyer what they bought.
+2. **No success-page data source.** `success_url` is
+   `/{slug}/checkout/success?session_id=…`, but no endpoint resolves a `cs_`, and
+   the buyer typically lands there *before* the webhook fires — it needs a pending
+   state, not just a lookup.
+3. **Frontend has no `is_subscription` branch.** `addToCartButton.tsx:28`
+   unconditionally calls `createCartItem`, which now 400s on any recurring plan
+   since `CartItem.clean()` started rejecting them. This is a live bug, not a gap.
+4. **No cancellation.** Nothing calls `subscriptions.cancel`, and §4.1 forbids the
+   buyer token from authorising it — this needs a real credential first.
+5. **Refunds and disputes are unmodelled.** `Payment` has no status column by
+   design, so there is nowhere to record them.
+6. **A Stripe-side item removal silently ends a subscription locally.**
+   `_sync_subscription` marks rows whose `si_` vanished as `canceled`. Correct for
+   a plan swap, but indistinguishable from a seller removing an item in the
+   dashboard, and nothing records which it was.
+7. **Ops:** the Connect endpoint is subscribed to 7 events and needs the 9 in §5.2;
+   the URL is still ngrok; and `sync_stripe_catalog` needs a run to backfill plans
+   whose `stripe_price_id` is null.

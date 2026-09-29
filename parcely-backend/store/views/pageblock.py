@@ -6,14 +6,14 @@ from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from store.block_context import block_reference_context
+from store.blocks.context import block_reference_context
 from store.models import Page, PageBlock
 from store.serializers import (
     PageBlockBatchSerializer,
     PageBlockSerializer,
     PageLayoutSerializer,
 )
-from store.validators import normalize_page_block_layout, validate_page_layout
+from store.blocks.validators import normalize_page_block_layout, validate_page_layout
 
 # note you CANNOT open a pageblock by itself, only can open a page then the page's pageblocks
 

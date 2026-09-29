@@ -5,7 +5,7 @@ from s3.models import Blob
 from accounts.models import AppUser
 from common.models import TimestampedModel
 from store.constants import RESERVED_PAGE_SLUGS
-from store.validators import validate_style, validate_page_block_style, validate_page_block_layout, validate_page_block_content, validate_page_layout, normalize_page_block_style, normalize_page_block_layout
+from store.blocks.validators import validate_style, validate_page_block_style, validate_page_block_layout, validate_page_block_content, validate_page_layout, normalize_page_block_style, normalize_page_block_layout
 from django.utils.text import slugify
 from django.core.exceptions import ValidationError
 def default_storefront_style():

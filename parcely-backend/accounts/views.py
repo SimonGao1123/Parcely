@@ -142,7 +142,20 @@ class VerifyEmailAPIView(APIView):
         if request.user.is_authenticated and request.user.email.lower() != email:
             return Response({"error": "You are not authorized to verify this email address."}, status=status.HTTP_403_FORBIDDEN)
             # if you are logged in MUST verify with logged in email
-        
+
+        # The same gate SendOTPEmailAPIView applies, repeated rather than assumed.
+        # That view refuses to mint a code for an account's address, so no row
+        # should exist for a guest to guess - but the owner requesting their own
+        # code creates one, and reaching it here both burns it at MAX_ATTEMPTS and
+        # pays out a buyer session on a hit. Checked before the lock, so a rejected
+        # caller never holds a row.
+        existing_user = AppUser.objects.filter(email__iexact=email).first()
+        if existing_user and request.user.id != existing_user.id:
+            return Response(
+                {'detail': 'Sign in to verify this email address.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         with transaction.atomic():
             # Locked across the read-check-increment: attempts is the only
             # brute-force defence on a 6-digit code, and unlocked parallel

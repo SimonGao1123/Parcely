@@ -19,7 +19,7 @@ from django.urls import path, include
 from accounts import urls as accounts_urls
 from accounts import views as accounts_views
 from store import urls as store_urls
-from billing.views.stripeWebhooks import stripe_connect_webhook, stripe_platform_webhook
+from billing.webhooks.views import stripe_connect_webhook, stripe_platform_webhook
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include(accounts_urls)),

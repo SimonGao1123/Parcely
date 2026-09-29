@@ -17,6 +17,10 @@ class Cart(TimestampedModel):
     public_session_id = models.CharField(max_length=255, null=True, blank=True)
     storefront = models.ForeignKey(StoreFront, on_delete=models.CASCADE, related_name="carts")
 
+    # Written when a Checkout Session is created, so the handler for that session can find
+    # the cart it came from and clear it once the money has moved.
+    stripe_checkout_session_id = models.CharField(max_length=255, null=True, blank=True)
+
     class Meta:
         # One cart per owner per storefront. Conditional because a cart has
         # exactly one of the two owners, so the other column is null on every
@@ -68,8 +72,16 @@ class CartItem(TimestampedModel):
         if self.plan.product.storefront != self.cart.storefront:
             raise ValidationError("Plan must be from the same storefront as the cart")
 
-        if self.plan.product.is_subscription and self.quantity > 1:
-            raise ValidationError("Subscription plans can only be purchased in a quantity of 1")
+        # Subscriptions are bought one at a time, straight from the product page. A cart
+        # holding one would drag the whole Checkout Session into subscription mode, since
+        # Stripe refuses a recurring price in payment mode - so five one-time items would
+        # be billed on a subscription's first invoice. Trials make it worse: Stripe puts
+        # them on the subscription rather than the line, so two plans with different trials
+        # in one cart have no valid session between them.
+        if self.plan.product.is_subscription:
+            raise ValidationError(
+                "Subscriptions are bought directly, not through the cart"
+            )
 
     def save(self, *args, **kwargs):
         self.full_clean()

@@ -1,10 +1,11 @@
 # Catalog sync + Connect webhook — implementation notes
 
-Covers `STRIPE.md` §8 step 4 (push the catalog to Stripe) and the Connect-scoped webhook
-endpoint. Both shipped 2026-09-16.
+Covers pushing the catalog to Stripe (`products/stripe_catalog.py`) and the
+Connect-scoped webhook endpoint. Both shipped 2026-09-16.
 
-Where this disagrees with `STRIPE.md`, **this file is correct** — `STRIPE.md` was not
-revised. The deviations are listed in §7.
+`STRIPE.md` was revised on 2026-09-20 and now agrees with this file. It carries the
+design rationale; this one carries the implementation detail and the open-gap list
+in §8.
 
 ---
 
@@ -25,7 +26,7 @@ UniqueConstraint(fields=["stripe_product_id"],
 ```
 
 **Partial** because both columns are null until the plan is pushed, and a plain unique
-index would make the nulls collide on some backends and not others. `STRIPE.md` §3 asked
+index would make the nulls collide on some backends and not others. `STRIPE.md` §6 asks
 only for the price constraint; the product one is added because the mapping is 1:1 by
 construction (each `Plan` gets its own Stripe Product), so two rows sharing a `prod_`
 means a resync bug — and without the constraint those two plans would silently overwrite
@@ -49,7 +50,7 @@ the single client in the process.
 cascade deletes. `billing/views/onboarding.py` already set the convention that Stripe
 calls happen in the view.
 
-### Mapping (`STRIPE.md` §2.1)
+### Mapping (`STRIPE.md` §2)
 
 | Local | Stripe |
 |---|---|
@@ -95,7 +96,7 @@ against `stripe==15.6.1`'s `PriceCreateParamsRecurring`:
   creates the object on the **platform** account, silently putting one seller's catalog in
   the shared one. `StoreFront.save()` gates on `can_sell` so this is near-impossible, but
   the column is nullable and the failure is invisible.
-- **Price edits archive-and-recreate** (`STRIPE.md` §2.2). Stripe Prices are immutable.
+- **Price edits archive-and-recreate** (`STRIPE.md` §2.1). Stripe Prices are immutable.
   Archiving rather than deleting is what keeps existing subscribers billing at the amount
   they agreed to — which is also why `Order` and `Subscription` must snapshot
   `stripe_price_id` rather than reading through the FK.
@@ -189,7 +190,7 @@ and the leak was the larger half of the problem.
 
 ---
 
-## 5. Webhooks — `billing/views/stripeWebhooks.py`, `billing/handlers.py`, `core/urls.py`
+## 5. Webhooks — `billing/webhooks/views.py`, `billing/webhooks/account_lifecycle.py`, `core/urls.py`
 
 New route `webhooks/stripe/connect/` next to the existing `webhooks/stripe/platform/`.
 
@@ -224,16 +225,24 @@ secret). Everything below the parse is the subtle part and must not drift:
 - **`ValueError` → `200`.** A retry replays identical bytes and fails identically, so a
   non-2xx would only buy a multi-day backoff on the whole endpoint.
 
-### `_CONNECT_HANDLERS = {}` — separate and empty
+### The Connect registry — separate, and empty *at the time of this step*
 
-Separate from `_HANDLERS` because those keys are v2 type strings; one shared namespace
-invites reading v1 `account.updated` as `v2.core.account.*` — two payload shapes behind
-names differing by a prefix.
+Separate from the platform registry because those keys are v2 type strings; one shared
+namespace invites reading v1 `account.updated` as `v2.core.account.*` — two payload shapes
+behind names differing by a prefix. That separation still holds, and is now expressed as
+two modules rather than two dicts in one file.
 
-Empty because fulfilment needs `Order` / `Payment` / `Subscription`, which do not exist.
-An unhandled type already falls through to being recorded with `processed_at` set, so the
-endpoint is **observe-only**: it records real payloads, which is what makes those models
-designable against observed data instead of guessed shapes.
+It was left **empty** at this step because fulfilment needs `Order` / `Payment` /
+`Subscription`, which did not exist yet. An unhandled type falls through to being recorded
+with `processed_at` set, so the endpoint was **observe-only** on purpose: it captured real
+payloads, which is what made those models designable against observed data instead of
+guessed shapes.
+
+> **Superseded 2026-09-24.** The registry now holds nine handlers in
+> `billing/webhooks/fulfilment.py`, and the module layout moved —
+> `billing/handlers.py` → `billing/webhooks/account_lifecycle.py`,
+> `billing/views/stripeWebhooks.py` → `billing/webhooks/views.py`.
+> `STRIPE.md` §5 is authoritative for the current shape.
 
 `evt_` ids are globally unique across both endpoints, so one unique index serves both.
 
@@ -278,7 +287,7 @@ that no error surfaces. **Fixed** by `_account_id()` raising `StripeAccountMissi
 
 ### 7.3 No uniqueness on `stripe_price_id`
 
-`STRIPE.md` §3 required it; there was no constraint. Two plans sharing a `price_` means
+`STRIPE.md` §6 requires it; there was no constraint. Two plans sharing a `price_` means
 fulfilment cannot resolve an incoming `invoice.paid` to one plan. **Fixed** by the partial
 constraints in §1.
 
@@ -323,13 +332,19 @@ the rollback does not actually restore consistency.
 Archiving a Stripe Price has no effect on subscriptions already billing against it, so a
 later `invoice.paid` will carry a `price_` that resolves to no local row. The fix is not a
 soft-delete column — **`Subscription.plan` must be `on_delete=PROTECT`** when that model
-lands, turning the delete into a 409. *Blocking constraint on `STRIPE.md` §8 step 8.*
+lands, turning the delete into a 409. **Done** — see `STRIPE.md` §6.
 
-### 8.5 Payment events are recorded but never fulfilled
+### ~~8.5 Payment events are recorded but never fulfilled~~ — closed 2026-09-24
 
-`_CONNECT_HANDLERS` is empty by design, so a completed payment produces a `StripeEvent`
-row and **no `Order`**. Until `Order`/`Payment`/`Subscription` exist, a buyer can pay and
-the system will have no record of what they bought outside the raw payload.
+Was: the Connect registry was empty by design, so a completed payment produced a
+`StripeEvent` row and **no `Order`**.
+
+Now: nine handlers in `billing/webhooks/fulfilment.py` write `Payment`, `Order` and
+`Subscription`, clear the cart and release capacity reservations. See `STRIPE.md` §5.
+
+Still open underneath it: **nothing reads those rows back.** `billing/` has no
+`serializers.py`, so a buyer still cannot see what they bought — the record exists, the
+endpoint does not.
 
 ### 8.6 No "not sellable" signal in the API
 
@@ -385,6 +400,37 @@ Stripe caps a recurring interval at 3 years (36 months, 156 weeks); `Plan` valid
 one: the seller gets a generic 502 "Stripe rejected the catalog change" instead of being
 told the number is too large. A `MaxValueValidator` per interval unit would move the error
 to the form field where it belongs. None of the three existing plans are affected.
+
+---
+
+## 8b. Step-8 models — superseded
+
+The `Order` / `Payment` / `Subscription` decisions drafted here on 2026-09-19 were
+revised during implementation (2026-09-20) and the models have shipped. Four of
+them are now wrong and were removed rather than left to mislead:
+
+- `Payment` has no `subscription` FK — the link is `Payment → Order → Subscription`.
+- `Order` covers subscription lines too, so the reconciliation formula is a plain
+  `sum(unit_price_cents × quantity) == payment.amount_cents`.
+- `Subscription` maps to a Stripe **SubscriptionItem**, not a Subscription, because
+  one Checkout Session creates at most one `sub_` holding N items.
+- The Connect event list changed: `payment_intent.*` and `payment_method.attached`
+  are out, `customer.subscription.created` is in.
+
+**`STRIPE.md` §1, §3, §5.1 and §6 now describe the shipped models and the event
+subscriptions.** It was revised on 2026-09-20 and no longer disagrees with this file.
+
+Of the two gaps flagged from that draft, one has since closed:
+
+- ~~**`max_capacity` can oversell.**~~ Closed 2026-09-24. `SubscriptionCheckout`
+  reserves the slot when the session is created, under a `select_for_update` on the
+  `Product` row, and `billing/capacity.py` counts reservations alongside live
+  subscribers. The reservation's 30-minute TTL matches the session's `expires_at`,
+  and the release happens in the same transaction as the `Subscription` write.
+  `STRIPE.md` §3.4 explains why locking alone was not sufficient.
+- **Refunds have no local model.** Still open. `charge.refunded` and
+  `charge.dispute.created` have nowhere to write, so subscribing to them now would
+  only accumulate unhandled `StripeEvent` rows.
 
 ---
 

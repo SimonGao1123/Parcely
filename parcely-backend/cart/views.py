@@ -40,21 +40,22 @@ class CreateCartItemAPIView(APIView):
         serializer = CartItemSerializer(data=request.data, context={"storefront": storefront})
         serializer.is_valid(raise_exception=True)
         plan = serializer.validated_data["plan"]
-        quantity = serializer.validated_data["quantity"]
+        # .get, because the model's default makes the field optional to DRF, which then
+        # leaves it out of validated_data entirely rather than filling it in.
+        quantity = serializer.validated_data.get("quantity", 1)
 
         cart = self._resolve_cart(request, storefront)
 
+        # No capacity check here: max_capacity applies only to subscriptions, and the
+        # serializer has already refused those. Nothing a cart can hold is capped.
+        #
         # Adding a plan already in the cart tops it up rather than colliding with
         # the (cart, plan) unique constraint. Safe as a read-modify-write because
         # _resolve_cart holds a row lock on the cart for the transaction.
-        #
-        # A subscription is the exception: one is the only legal quantity, so
-        # pressing add again leaves the cart as it is instead of failing
-        # validation on the way to a quantity it can never have.
         item = CartItem.objects.filter(cart=cart, plan=plan).first()
         if item is None:
             CartItem.objects.create(cart=cart, plan=plan, quantity=quantity)
-        elif not plan.product.is_subscription:
+        else:
             item.quantity += quantity
             item.save()
 
@@ -108,10 +109,9 @@ class UpdateDeleteCartItemAPIView(APIView):
             cart_item.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
 
-        # Through the serializer rather than a direct save so the subscription
-        # rule comes back as a 400 naming the field. Model validation raises
-        # Django's ValidationError, which DRF does not translate, so saving
-        # directly turns a bad quantity into a 500.
+        # Through the serializer rather than a direct save: model validation raises
+        # Django's ValidationError, which DRF does not translate, so saving directly
+        # turns a bad quantity into a 500 instead of a 400 naming the field.
         serializer = CartItemSerializer(
             cart_item,
             data={"quantity": quantity},

@@ -4,7 +4,8 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from accounts.models import AppUser, CardPaymentsStatus
-from billing import connect, handlers
+from billing import connect
+from billing.webhooks import account_lifecycle
 
 
 @api_view(['POST'])
@@ -30,7 +31,7 @@ def start_onboarding(request):
         # back through onboarding they already completed - and every retry reads the
         # same stale row, so there is no way out. One extra Stripe call on an explicit
         # button press is a fair price.
-        handlers.refresh_card_payments_status(user.stripe_account_id)
+        account_lifecycle.refresh_card_payments_status(user.stripe_account_id)
         # Refetched because that writes via a queryset UPDATE.
         user = AppUser.objects.get(pk=user.pk)
 
@@ -106,7 +107,7 @@ def sync_onboarding_status(request):
         # account ever existed. Nothing to converge, so report the absence.
         return Response({"stripe_account_id": None, "card_payments_status": None})
 
-    handlers.refresh_card_payments_status(account_id)
+    account_lifecycle.refresh_card_payments_status(account_id)
 
     # Refetched because refresh_card_payments_status writes via a queryset UPDATE, so
     # the in-memory request.user still carries the pre-sync status.

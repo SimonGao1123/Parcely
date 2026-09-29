@@ -29,20 +29,13 @@ class CartItemSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Plan does not belong to this storefront.")
         if not plan.product.is_active:
             raise serializers.ValidationError("This product is not for sale.")
-        return plan
-
-    # Checked here rather than left to the model so an over-quantity subscription
-    # is rejected identically whether or not it is already in the cart — the view
-    # skips the top-up for subscriptions, which would otherwise swallow it.
-    def validate(self, attrs):
-        # A partial update sends only the quantity, so the plan has to come from
-        # the row being edited or the rule below silently passes.
-        plan = attrs.get("plan") or (self.instance.plan if self.instance else None)
-        if plan and plan.product.is_subscription and attrs.get("quantity", 1) > 1:
+        # Same reasoning as the cross-storefront rule above: the model refuses this too,
+        # but as a non-field error at save time.
+        if plan.product.is_subscription:
             raise serializers.ValidationError(
-                {"quantity": "Subscription plans can only be purchased in a quantity of 1."}
+                "Subscriptions are bought directly, not through the cart."
             )
-        return attrs
+        return plan
 
 
 class CartSerializer(serializers.ModelSerializer):

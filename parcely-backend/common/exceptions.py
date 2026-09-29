@@ -23,7 +23,7 @@ def _as_drf_validation_error(exc: DjangoValidationError) -> exceptions.Validatio
 def api_exception_handler(exc, context):
     """DRF's default handler only translates APIException, Http404 and Django's
     PermissionDenied. Model-layer validation (full_clean, clean, and the validators
-    in store.validators / s3.metadata_schema) raises Django's ValidationError, which
+    in store.blocks.validators / s3.metadata_schema) raises Django's ValidationError, which
     would otherwise escape as an unhandled 500 rendered as an HTML page."""
     if isinstance(exc, DjangoValidationError):
         exc = _as_drf_validation_error(exc)

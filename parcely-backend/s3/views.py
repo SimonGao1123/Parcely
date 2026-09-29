@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view
 from rest_framework import status
 from .serializers import PresignRequestSerializer
 from .models import Blob, PRESIGN_EXPIRES_SECONDS
-from .s3 import s3_client
+from .client import s3_client
 from django.conf import settings
 import uuid
 import logging

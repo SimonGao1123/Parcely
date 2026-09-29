@@ -63,15 +63,13 @@ def merge_carts(source, target):
     # either would lose whatever the shopper picked out.
     target_items = {item.plan_id: item for item in target.items.all()}
 
-    for item in source.items.select_related("plan__product"):
+    for item in source.items.all():
         existing = target_items.get(item.plan_id)
         if existing is None:
             item.cart = target
             item.save()
-        elif not item.plan.product.is_subscription:
+        else:
             existing.quantity += item.quantity
             existing.save()
-        # A subscription already in the target stays at its single allowed
-        # unit; the duplicate goes with the source cart below.
 
     source.delete()

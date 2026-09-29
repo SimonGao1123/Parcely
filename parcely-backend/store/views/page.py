@@ -7,7 +7,7 @@ from rest_framework import status
 from store.models import Page, PageBlock, StoreFront
 from store.serializers import PageSerializer, PageSummarySerializer
 from store.access import visible_storefront_q
-from store.block_context import block_reference_context
+from store.blocks.context import block_reference_context
 # Forward FKs read by PageSerializer (which nests StoreFrontSummarySerializer,
 # which reads homepage.logo_image).
 SELECT_FIELDS = (

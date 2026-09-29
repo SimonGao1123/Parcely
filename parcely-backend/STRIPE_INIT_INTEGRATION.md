@@ -4,9 +4,10 @@ As-built documentation for the first Stripe slice: seller connected-account crea
 hosted onboarding, and the platform webhook endpoint that keeps capability status
 converged.
 
-This supersedes **STRIPE.md §6 (Webhooks)**, which was written before implementation and
-describes a v1 `account.updated` handler and a `Stripe-Account` header for seller
-resolution. Neither is how the code works. Everything else in STRIPE.md still stands.
+`STRIPE.md` §5 was revised on 2026-09-20 to match the code and no longer describes a v1
+`account.updated` handler or `Stripe-Account` header resolution. It is the short version;
+this file is the detail — thin-event payload shapes, account statuses, onboarding
+sequence.
 
 ---
 
@@ -17,8 +18,8 @@ resolution. Neither is how the code works. Everything else in STRIPE.md still st
 | Piece | File |
 |---|---|
 | Outbound Stripe calls | `billing/connect.py` |
-| Webhook event handlers | `billing/handlers.py` |
-| Platform webhook endpoint | `billing/views/stripeWebhooks.py` |
+| Webhook event handlers | `billing/webhooks/account_lifecycle.py` |
+| Platform webhook endpoint | `billing/webhooks/views.py` |
 | Seller onboarding endpoint | `billing/views/onboarding.py` |
 | Event audit log | `billing/models.py` (`StripeEvent`) |
 | Seller state | `accounts/models.py` (`stripe_account_id`, `card_payments_status`) |
@@ -29,14 +30,18 @@ payloads are observed.
 
 ### 1.1 Platform scope only — answering a common question
 
-There is exactly **one** Stripe webhook route, `webhooks/stripe/platform/`
-(`core/urls.py:29`). A Connect-scoped endpoint does not exist in any form — no route, no
-view, and nothing in the repo calls `construct_event` (the v1/snapshot API a Connect
-endpoint would need).
+> **Historical.** True at the time of this step (2026-09-13). The Connect endpoint
+> shipped 2026-09-16 and began fulfilling 2026-09-24; there are now two routes. Kept
+> because the *reasoning* below — why two endpoints rather than one — is still why the
+> split exists.
+
+At this step there was exactly **one** Stripe webhook route, `webhooks/stripe/platform/`.
+A Connect-scoped endpoint did not exist in any form — no route, no view, and nothing in
+the repo called `construct_event` (the v1/snapshot API a Connect endpoint needs).
 
 `STRIPE_CONNECT_WEBHOOK_SECRET` **is** required by `core/settings.py:38` via
 `os.environ[...]`, so the process won't boot without it, but it is referenced nowhere
-else. It is a placeholder for the endpoint STRIPE.md §6 specifies and we have not written.
+else. The Connect endpoint that uses it shipped later — see `STRIPE_CATALOG_SYNC.md` §5.
 
 ### 1.2 Events are not account-scoped at the delivery layer
 
@@ -274,20 +279,24 @@ see §6.2.
 
 ---
 
-## 4. `connect.py` vs `handlers.py`
+## 4. `connect.py` vs the inbound handlers
 
-Two files, two directions. `connect.py` is everything **we say to Stripe**;
-`handlers.py` is everything **Stripe says to us**. The dependency runs one way only:
-`handlers` imports `connect`, never the reverse.
+Two directions. `billing/connect.py` is everything **we say to Stripe**; the handler
+module is everything **Stripe says to us**. The dependency runs one way only: the
+handlers import `connect`, never the reverse.
+
+> **Renamed 2026-09-24.** `billing/handlers.py` is now
+> `billing/webhooks/account_lifecycle.py`, and `billing/views/stripeWebhooks.py` is
+> `billing/webhooks/views.py`. The names below are updated; the reasoning is unchanged.
 
 ```
                        ┌──────────────────┐
   onboarding.py ──────▶│                  │
                        │   connect.py     │─────▶ Stripe API
-  handlers.py   ──────▶│  (no DB writes)  │
-                       └──────────────────┘
+  account_          ──▶│  (no DB writes)  │
+  lifecycle.py         └──────────────────┘
 
-  Stripe ──▶ stripeWebhooks.py ──▶ handlers.py ──▶ AppUser rows
+  Stripe ──▶ views.py ──▶ account_lifecycle.py ──▶ AppUser rows
                 (transport)         (DB writes)
 ```
 
@@ -457,7 +466,7 @@ why double-clicking the button is idempotent by construction.
 
 ## 7. Webhook flow
 
-`POST /webhooks/stripe/platform/` → `billing/views/stripeWebhooks.py`.
+`POST /webhooks/stripe/platform/` → `billing/webhooks/views.py`.
 
 The route lives in `core/urls.py`, not `billing/urls.py`, and the `webhooks/` prefix is
 **load-bearing**: `accounts/middleware.py:14` short-circuits that prefix to
@@ -569,7 +578,8 @@ Settings, all `os.environ[...]` with no defaults (`core/settings.py:35-41`):
 STRIPE_SECRET_KEY
 STRIPE_PUBLISHABLE_KEY
 STRIPE_WEBHOOK_SECRET            # platform endpoint signing secret
-STRIPE_CONNECT_WEBHOOK_SECRET    # reserved; endpoint not built (see §1.1)
+STRIPE_CONNECT_WEBHOOK_SECRET    # connect endpoint signing secret — in use since
+                                 # 2026-09-16; must match `stripe listen` when testing
 FRONTEND_URL                     # refresh_url / return_url base
 ```
 
@@ -656,24 +666,38 @@ successfully processed. Self-heals on the next event, but silently.
 **Fix:** on a zero-row update, re-check whether that user already holds *this* account id
 and proceed if so, instead of bailing.
 
-### Gap 3 — no retry sweeper
+### Gap 3 — no retry sweeper — *narrowed 2026-09-24, not closed*
 
-`StripeEvent.error` is written but never read, and `idx_stripe_event_unprocessed` exists
-for a sweeper that does not exist. Once Stripe exhausts its own retries, failures
-accumulate invisibly. This is the natural next ticket.
+The worse half of this was a bug, not a missing feature. `_record_and_dispatch`
+answered **200 to every redelivery**, including redeliveries of events whose handler
+had raised — so Stripe's own retries were being discarded by the arm meant to dedupe
+them, and a raising handler was a permanent silent drop. It now re-dispatches when
+`processed_at` is null, which is what makes Stripe's retry schedule actually work.
+`STRIPE.md` §5.1 has the delivery table.
 
-### Gap 4 — the Connect endpoint
+Still open: once Stripe **exhausts** its retries, `StripeEvent.error` is written but
+never read, and `idx_stripe_event_unprocessed` still exists for a sweeper that does
+not. Failures accumulate invisibly after the last retry rather than after the first.
 
-Required before any payment work. See §1.1.
+### ~~Gap 4 — the Connect endpoint~~ — shipped, and now fulfilling
+
+`webhooks/stripe/connect/` landed 2026-09-16 as verify-record-dispatch with an empty
+registry. Fulfilment landed 2026-09-24: nine handlers in
+`billing/webhooks/fulfilment.py` writing `Payment`, `Order` and `Subscription`.
+`STRIPE.md` §5 is authoritative for the event list and the scoping rules.
+
+Caveat: the dashboard endpoint is still subscribed to **7** events and needs the 9,
+and `enabled_events` replaces rather than appends.
 
 ### Smaller
 
-- `Plan.stripe_price_id` (`products/models.py:72`) lacks `unique=True`; STRIPE.md §3
-  specifies the constraint but no migration enforces it.
+- ~~`Plan.stripe_price_id` lacks a uniqueness constraint.~~ **Fixed** —
+  `STRIPE_CATALOG_SYNC.md` §1 added both partial unique constraints.
 - Plans created before onboarding completes need a Stripe backfill — plausibly triggered
   by the capability event reaching `active`.
 - `accounts/middleware.py:48-49` assigns a possibly-`None` `create_clerk_user()` result
   straight to `request.user`.
 - `accounts/middleware.py:14` has a dead `or request.path.startswith('/webhooks/clerk')`
   clause, fully subsumed by the preceding check.
-- `__pycache__/*.pyc` files are tracked in git.
+- ~~`__pycache__/*.pyc` files are tracked in git.~~ **Fixed 2026-09-24** — 104 files
+  untracked and `.gitignore` extended.
