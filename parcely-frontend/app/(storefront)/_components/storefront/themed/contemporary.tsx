@@ -8,6 +8,7 @@ import type { PageSummary } from "@/types/page";
 import type { ThemedHeaderProps, ThemedNavbarProps } from "./types";
 import { AuthControl } from "@/components/authControl";
 import { CartLink } from "@/app/(storefront)/_components/carts/cartLink";
+import { PurchasesLink } from "@/components/purchasesLink";
 
 function NavLink({ page, slug }: { page: PageSummary; slug: string }) {
     return (
@@ -65,6 +66,7 @@ export function ContemporaryNavbar({ storefront, pages, cartCount }: ThemedNavba
                 {pages.slice(mid).map((page) => (
                     <NavLink key={page.id} page={page} slug={slug} />
                 ))}
+                <PurchasesLink slug={slug} hidden={cartCount === null} className="text-sm uppercase tracking-[0.1em] opacity-80 transition-opacity hover:opacity-100" />
                 <CartLink
                     slug={slug}
                     count={cartCount}

@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { CHIP_BASE, CHIP_OFF, CHIP_ON } from "@/components/button";
 
-export type SettingsTab = "settings" | "products";
+export type SettingsTab = "settings" | "products" | "orders";
 
 const TABS: { key: SettingsTab; label: string }[] = [
     { key: "settings", label: "Settings" },
     { key: "products", label: "Products" },
+    { key: "orders", label: "Orders" },
 ];
 
 // A server component: which tab is active is decided by the route that rendered

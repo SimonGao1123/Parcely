@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { ThemedHeaderProps, ThemedNavbarProps } from "./types";
 import { AuthControl } from "@/components/authControl";
 import { CartLink } from "@/app/(storefront)/_components/carts/cartLink";
+import { PurchasesLink } from "@/components/purchasesLink";
 
 export function MinimalistNavbar({ storefront, pages, cartCount }: ThemedNavbarProps) {
     const { title, logo_image, slug } = storefront;
@@ -45,6 +46,7 @@ export function MinimalistNavbar({ storefront, pages, cartCount }: ThemedNavbarP
                         )}
                     </Link>
                 ))}
+                <PurchasesLink slug={slug} hidden={cartCount === null} className="text-sm opacity-70 transition-opacity hover:opacity-100" />
                 <CartLink
                     slug={slug}
                     count={cartCount}

@@ -2,8 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import CartLineItem from "@/app/(storefront)/_components/carts/cartLineItem";
 import ClearCartButton from "@/app/(storefront)/_components/carts/clearCartButton";
+import CheckoutPanel from "@/app/(storefront)/_components/checkout/checkoutPanel";
 import { orderPages } from "@/app/(storefront)/_components/storefront/orderPages";
+import { getMe } from "@/lib/api/auth/getMe";
 import { getCart } from "@/lib/api/cart/getCart";
+import { getBuyer } from "@/lib/api/checkout/getBuyer";
 import { getStorefrontDetails } from "@/lib/api/storefront/getStorefrontDetails";
 import { formatPrice } from "@/lib/price";
 
@@ -15,9 +18,11 @@ export default async function CartPage({
     const { storefrontSlug } = await params;
 
     // independent requests — awaiting them in sequence would waterfall
-    const [storefront, cart] = await Promise.all([
+    const [storefront, cart, buyer, me] = await Promise.all([
         getStorefrontDetails(storefrontSlug),
         getCart(storefrontSlug),
+        getBuyer(storefrontSlug),
+        getMe(),
     ]);
 
     // The layout already gates drafts to their owner; this keeps the owner from
@@ -78,6 +83,13 @@ export default async function CartPage({
 
                 <ClearCartButton storefrontSlug={storefrontSlug} />
             </div>
+
+            <CheckoutPanel
+                storefrontSlug={storefrontSlug}
+                target={{ kind: "cart" }}
+                buyer={buyer}
+                signedInEmail={me?.email ?? null}
+            />
         </Shell>
     );
 }

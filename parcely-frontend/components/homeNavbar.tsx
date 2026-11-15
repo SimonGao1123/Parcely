@@ -30,6 +30,10 @@ export default function HomeNavbar() {
                     <Button variant="outline" onClick={() => router.push("/profile")}>
                         Profile
                     </Button>
+                    {/* /purchases offers sign-in itself when signed out, so no guard */}
+                    <Button variant="outline" onClick={() => router.push("/purchases")}>
+                        Purchases
+                    </Button>
                 </div>
                 <AuthControl className="text-sm transition-colors hover:text-stone-950" />
             </nav>

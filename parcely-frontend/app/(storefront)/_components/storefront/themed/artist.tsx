@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { ThemedHeaderProps, ThemedNavbarProps } from "./types";
 import { AuthControl } from "@/components/authControl";
 import { CartLink } from "@/app/(storefront)/_components/carts/cartLink";
+import { PurchasesLink } from "@/components/purchasesLink";
 
 export function ArtistNavbar({ storefront, pages, cartCount }: ThemedNavbarProps) {
     return (
@@ -32,6 +33,7 @@ export function ArtistNavbar({ storefront, pages, cartCount }: ThemedNavbarProps
             ))}
 
             <div className="ml-auto flex items-center gap-5">
+                <PurchasesLink slug={storefront.slug} hidden={cartCount === null} className="text-sm uppercase tracking-[0.15em] opacity-80 transition-opacity hover:opacity-100" />
                 <CartLink
                     slug={storefront.slug}
                     count={cartCount}

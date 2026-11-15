@@ -25,6 +25,9 @@ export type Product = {
     is_subscription: boolean;
     is_active: boolean;
     max_capacity: number | null;
+    // Seats a new buyer could still take, reservations counted as taken. Null when
+    // the product is one-time or uncapped. Absent on cart summaries.
+    spots_left?: number | null;
     display_image: MediaBlob | null;
     plans: Plan[];
     created_at: string;

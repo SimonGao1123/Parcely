@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import AddToCartButton from "@/app/(storefront)/_components/carts/addToCartButton";
+import SpotsLeft from "@/app/(storefront)/_components/checkout/spotsLeft";
+import SubscribeButton from "@/app/(storefront)/_components/checkout/subscribeButton";
 import Button from "@/components/button";
 import { formatPrice, planIntervalSuffix, planName } from "@/lib/price";
 import type { ProductBlock as ProductBlockData } from "@/types/block";
@@ -111,15 +113,38 @@ export default function ProductBlock({
                         </label>
                     )}
 
-                    {plan && (
-                        <AddToCartButton
-                            storefrontSlug={storefrontSlug}
-                            planId={plan.id}
-                            // Subscriptions are one unit only, so the quantity
-                            // input above isn't rendered for them.
-                            quantity={product.is_subscription ? 1 : quantity}
+                    {/* a ternary, not &&, so a 0 never renders as text */}
+                    {product.is_subscription && plan?.trial_period_days ? (
+                        <p className="text-[0.8em] opacity-80">
+                            {plan.trial_period_days}-day free trial
+                        </p>
+                    ) : null}
+
+                    {product.is_subscription && (
+                        <SpotsLeft
+                            spotsLeft={product.spots_left}
+                            maxCapacity={product.max_capacity}
+                            className="text-[0.8em]"
                         />
                     )}
+
+                    {/* Subscriptions never enter the cart - the backend refuses them
+                        there - so they get their own buy-now page instead of the
+                        add-to-cart button. */}
+                    {plan &&
+                        (product.is_subscription ? (
+                            <SubscribeButton
+                                storefrontSlug={storefrontSlug}
+                                planId={plan.id}
+                                soldOut={product.spots_left === 0}
+                            />
+                        ) : (
+                            <AddToCartButton
+                                storefrontSlug={storefrontSlug}
+                                planId={plan.id}
+                                quantity={quantity}
+                            />
+                        ))}
                 </div>
             </div>
         </div>

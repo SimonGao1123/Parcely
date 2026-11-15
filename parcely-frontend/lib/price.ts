@@ -8,10 +8,10 @@ import type { Currency } from "@/types/storefront";
 // app, so pinning costs nothing.
 const LOCALE = "en-US";
 
-// The three plan helpers below read only pricing fields, so they take a Plan
-// without its product: cart items carry a PlanCartSummary, whose product is the
-// object rather than an id and so is not assignable to Plan.
-type PlanPricing = Omit<Plan, "product">;
+// The plan helpers below read only these pricing fields, so they take just those:
+// cart items carry a PlanCartSummary, whose product is an object rather than an id,
+// and purchase records carry a plan with no timestamps at all.
+type PlanPricing = Pick<Plan, "title" | "price_cents" | "billing_interval" | "billing_interval_count">;
 
 const INTERVAL_SHORT: Record<BillingInterval, string> = {
     day: "day",
