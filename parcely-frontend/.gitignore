@@ -10,6 +10,12 @@
 !.yarn/releases
 !.yarn/versions
 
+# pnpm is the only package manager; keep other lockfiles out
+package-lock.json
+yarn.lock
+bun.lock
+bun.lockb
+
 # testing
 /coverage
 
