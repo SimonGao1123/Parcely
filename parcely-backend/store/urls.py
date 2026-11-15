@@ -16,7 +16,7 @@ from store.views import (
     UpdatePageAPIView,
     UpdateStoreFrontAPIView,
 )
-from billing import checkout_urls
+from billing import checkout_urls, purchases_urls
 from products import urls as products_urls
 from cart import urls as cart_urls
 urlpatterns = [
@@ -49,4 +49,5 @@ urlpatterns = [
 
     # checkout related urls
     path('<str:storefront_slug>/checkout/', include(checkout_urls)),
+    path('<str:storefront_slug>/', include(purchases_urls)),
 ]

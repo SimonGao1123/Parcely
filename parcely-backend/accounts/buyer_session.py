@@ -12,24 +12,39 @@ BUYER_SESSION_SALT = "accounts.buyer_session"
 BUYER_SESSION_MAX_AGE = 60 * 60
 BUYER_SESSION_HEADER = "X-Buyer-Session"
 
+# The purchases scope reads a buyer's own history at one seller and nothing else.
+# Read only: cancelling or swapping a card from the buyer side still needs a fresh
+# code. It is the same OTP, signed under a different salt rather than tagged in the
+# payload, so a forgotten scope check fails the signature instead of letting a
+# checkout token read history or a history token check out.
+CHECKOUT_SCOPE = "checkout"
+PURCHASES_SCOPE = "purchases"
+PURCHASES_SESSION_HEADER = "X-Purchases-Session"
 
-def issue_buyer_token(customer) -> str:
+_SALTS = {
+    # Unchanged from before scopes existed, so tokens already issued stay valid.
+    CHECKOUT_SCOPE: BUYER_SESSION_SALT,
+    PURCHASES_SCOPE: f"{BUYER_SESSION_SALT}.{PURCHASES_SCOPE}",
+}
+
+
+def issue_buyer_token(customer, scope=CHECKOUT_SCOPE) -> str:
     # signing.dumps signs but does not encrypt, so the payload is readable by
     # whoever holds it - ids only, and everything else is re-read from the row.
     return signing.dumps(
         {"customer_id": customer.id, "seller_id": customer.seller_id},
-        salt=BUYER_SESSION_SALT,
+        salt=_SALTS[scope],
     )
 
 
-def read_buyer_customer(token, storefront) -> Customer | None:
+def read_buyer_customer(token, storefront, scope=CHECKOUT_SCOPE) -> Customer | None:
     """The Customer this token names at this storefront, or None."""
     if not token:
         return None
 
     try:
         payload = signing.loads(
-            token, salt=BUYER_SESSION_SALT, max_age=BUYER_SESSION_MAX_AGE
+            token, salt=_SALTS[scope], max_age=BUYER_SESSION_MAX_AGE
         )
     except signing.BadSignature:
         # Covers SignatureExpired too - a caller cannot act on the difference
@@ -46,3 +61,9 @@ def read_buyer_customer(token, storefront) -> Customer | None:
 
 def buyer_from_request(request, storefront) -> Customer | None:
     return read_buyer_customer(request.headers.get(BUYER_SESSION_HEADER), storefront)
+
+
+def purchases_buyer_from_request(request, storefront) -> Customer | None:
+    return read_buyer_customer(
+        request.headers.get(PURCHASES_SESSION_HEADER), storefront, PURCHASES_SCOPE
+    )

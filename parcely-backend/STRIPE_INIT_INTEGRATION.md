@@ -71,7 +71,7 @@ nullable — some events (ping) have no account at all.
 One `AppUser` = one Stripe connected account = the payout destination for **all** of that
 seller's storefronts. Buyers pay via direct charges, so the seller is merchant of record.
 
-Account shape, set at creation in `connect.create_connected_account()`:
+Account shape, set at creation in `connect_api.create_connected_account()`:
 
 - **Accounts v2 only.** Never the v1 `type: "express" | "standard" | "custom"`.
 - `dashboard: "full"` — sellers get a real Stripe dashboard.
@@ -197,7 +197,7 @@ handler that makes an extra network call before it can even identify the seller.
 
 ### 3c. The Account object
 
-`connect.retrieve_account()` → `GET /v2/core/accounts/{id}` with
+`connect_api.retrieve_account()` → `GET /v2/core/accounts/{id}` with
 `include=["configuration.merchant"]`. Top-level keys (`_account.py:4388-4450`):
 
 ```jsonc
@@ -221,7 +221,7 @@ handler that makes an extra network call before it can even identify the seller.
 }
 ```
 
-The single path we read (`connect.merchant_status()`):
+The single path we read (`connect_api.merchant_status()`):
 
 ```
 configuration.merchant.capabilities.card_payments.status          // _account.py:1830
@@ -247,7 +247,7 @@ where each `status_details` entry is (`_account.py:622`):
 1. **`include=` is mandatory.** Without it the response comes back with
    `configuration = None` and `requirements = None` — the keys are present but null, so
    attribute access raises `AttributeError` on `None` rather than returning empty. This
-   is why every Account read in the codebase funnels through `connect.retrieve_account()`,
+   is why every Account read in the codebase funnels through `connect_api.retrieve_account()`,
    and why **`notification.fetch_related_object()` must never be used**: it issues the
    bare GET and cannot pass params.
 2. **Two different things are called `card_payments`.**
@@ -338,8 +338,8 @@ This is the only webhook-side writer of `AppUser`.
 are one line calling it.
 
 ```
-connect.retrieve_account(account_id)      ← always refetch
-  → connect.merchant_status(account)
+connect_api.retrieve_account(account_id)      ← always refetch
+  → connect_api.merchant_status(account)
   → AppUser by stripe_account_id
       → miss? _adopt_by_metadata()
   → AppUser.objects.filter(pk=...).update(card_payments_status=status)
@@ -683,7 +683,7 @@ not. Failures accumulate invisibly after the last retry rather than after the fi
 
 `webhooks/stripe/connect/` landed 2026-09-16 as verify-record-dispatch with an empty
 registry. Fulfilment landed 2026-09-24: nine handlers in
-`billing/webhooks/fulfilment.py` writing `Payment`, `Order` and `Subscription`.
+`billing/webhooks/payment_events.py` writing `Payment`, `Order` and `Subscription`.
 `STRIPE.md` §5 is authoritative for the event list and the scoping rules.
 
 Caveat: the dashboard endpoint is still subscribed to **7** events and needs the 9,

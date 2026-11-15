@@ -57,11 +57,22 @@ class ProductSummarySerializer(serializers.ModelSerializer): # for display in pa
         queryset=Blob.objects.all(), source="display_image", write_only=True,
         required=False, allow_null=True,
     )
-    
+
+    # Seats a new buyer could still take. Counts unexpired reservations as taken, the
+    # same figure capacity.claim() refuses on, so a product reading 0 here is one the
+    # subscribe endpoint will also turn away.
+    spots_left = serializers.SerializerMethodField()
+
     class Meta:
         model = Product
-        fields = ['id', 'name', 'description', 'is_subscription', 'max_capacity', 'display_image', 'plans', 'storefront', 'is_active', 'created_at', 'updated_at', 'display_image_id']
+        fields = ['id', 'name', 'description', 'is_subscription', 'max_capacity', 'spots_left', 'display_image', 'plans', 'storefront', 'is_active', 'created_at', 'updated_at', 'display_image_id']
         read_only_fields = ['id', 'created_at', 'updated_at', 'storefront']
+
+    def get_spots_left(self, obj):
+        if not obj.is_subscription or obj.max_capacity is None:
+            return None
+        from billing.capacity import consumed_capacity  # billing imports products.models
+        return max(0, obj.max_capacity - consumed_capacity(obj))
 
 class ProductCartItemSerializer(serializers.ModelSerializer):
     display_image = BlobSerializer(read_only=True)

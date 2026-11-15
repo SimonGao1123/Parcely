@@ -14,6 +14,9 @@ from django.urls import path
 
 from accounts.views import SendOTPEmailAPIView, VerifyEmailAPIView
 from billing.views.checkout import (
+    CheckoutBuyerAPIView,
+    CheckoutPlanAPIView,
+    CheckoutSessionStatusAPIView,
     CreateCheckoutSessionAPIView,
     CreateSubscriptionCheckoutSessionAPIView,
 )
@@ -26,5 +29,12 @@ urlpatterns = [
         'subscription/',
         CreateSubscriptionCheckoutSessionAPIView.as_view(),
         name='checkout-subscription',
+    ),
+    path('buyer/', CheckoutBuyerAPIView.as_view(), name='checkout-buyer'),
+    path('plans/<int:plan_id>/', CheckoutPlanAPIView.as_view(), name='checkout-plan'),
+    path(
+        'sessions/<str:session_id>/',
+        CheckoutSessionStatusAPIView.as_view(),
+        name='checkout-session-status',
     ),
 ]

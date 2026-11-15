@@ -8,10 +8,12 @@ from rest_framework.views import APIView
 
 from accounts.buyer_session import buyer_from_request
 from billing import capacity, stripe_checkout
-from billing.models import LIVE_SUBSCRIPTION_STATUSES, Subscription
+from billing.connect_api import _client
+from billing.models import LIVE_SUBSCRIPTION_STATUSES, Payment, Subscription
 from cart.models import Cart
 from cart.services import find_cart
 from products.models import Plan
+from products.serializers import ProductSummarySerializer
 from store.models import StoreFront
 
 
@@ -37,6 +39,13 @@ class _BuyerCheckoutAPIView(APIView):
             return storefront, None, Response(
                 {"detail": "Verify your email before checking out."},
                 status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        # 403 rather than a pretend 401: re-verifying cannot lift it, only the seller can.
+        if customer.blocked_at is not None:
+            return storefront, None, Response(
+                {"detail": "You can't purchase from this store."},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         if not storefront.owner.can_sell:
@@ -197,3 +206,111 @@ class CreateSubscriptionCheckoutSessionAPIView(_BuyerCheckoutAPIView):
         capacity.attach_session(reservation, session.id)
 
         return Response({"url": session.url, "session_id": session.id})
+
+
+class CheckoutPlanAPIView(APIView):
+    """One subscription plan as the subscribe page shows it, before any verification.
+
+    Public on purpose - it is what a page block already exposes - and limited to plans a
+    buyer could actually subscribe to, so a draft store or a retired product reads as a 404.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        plan = get_object_or_404(
+            Plan.objects.select_related("product__display_image").prefetch_related(
+                "product__plans"
+            ),
+            id=kwargs["plan_id"],
+            product__storefront__slug=kwargs["storefront_slug"],
+            product__storefront__is_draft=False,
+            product__is_active=True,
+            product__is_subscription=True,
+        )
+        return Response(
+            {
+                "plan_id": plan.id,
+                "product": ProductSummarySerializer(
+                    plan.product, context={"request": request}
+                ).data,
+            }
+        )
+
+
+class CheckoutBuyerAPIView(APIView):
+    """Who this browser has verified as at this storefront, if anyone.
+
+    The signed token is opaque to the frontend, which cannot tell a live one from an
+    expired one. This is how it decides between "checking out as" and asking for a code.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        storefront = get_object_or_404(
+            StoreFront, slug=kwargs["storefront_slug"], is_draft=False
+        )
+        customer = buyer_from_request(request, storefront)
+        if customer is None:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        return Response(
+            {"email": customer.email, "blocked": customer.blocked_at is not None}
+        )
+
+
+class CheckoutSessionStatusAPIView(APIView):
+    """Whether a Checkout Session the buyer just returned from has been fulfilled yet.
+
+    The buyer usually lands on the success page before the webhook does, so this answers
+    from Stripe for the session's own state and from our rows for fulfilment.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        storefront = get_object_or_404(
+            StoreFront, slug=kwargs["storefront_slug"], is_draft=False
+        )
+        customer = buyer_from_request(request, storefront)
+        not_found = Response(status=status.HTTP_404_NOT_FOUND)
+        if customer is None or not customer.stripe_customer_id:
+            return not_found
+
+        session_id = kwargs["session_id"]
+        if not session_id.startswith("cs_"):
+            return not_found
+
+        try:
+            session = _client.v1.checkout.sessions.retrieve(
+                session_id, {}, {"stripe_account": storefront.owner.stripe_account_id}
+            )
+        except stripe.InvalidRequestError:
+            return not_found
+        except stripe.StripeError:
+            return Response(
+                {"detail": "Could not check this payment, try again."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        # The same 404 as a session that does not exist: an id that leaked or was
+        # guessed says nothing about whose it is.
+        if session.customer != customer.stripe_customer_id:
+            return not_found
+
+        if session.mode == "subscription":
+            fulfilled = bool(session.subscription) and Subscription.objects.filter(
+                customer=customer, stripe_subscription_id=session.subscription
+            ).exists()
+        else:
+            fulfilled = Payment.objects.filter(
+                customer=customer, stripe_checkout_session_id=session.id
+            ).exists()
+
+        return Response(
+            {
+                "mode": session.mode,
+                "status": session.status,
+                "payment_status": session.payment_status,
+                "amount_total": session.amount_total,
+                "currency": session.currency,
+                "fulfilled": fulfilled,
+            }
+        )

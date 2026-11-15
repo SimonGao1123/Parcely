@@ -5,7 +5,7 @@ one to one:
 
     views.py              both endpoints - signature check, StripeEvent row, dispatch
     account_lifecycle.py  platform endpoint - v2 thin events, writes AppUser
-    fulfilment.py         connect endpoint - v1 snapshot events, writes money models
+    payment_events.py     connect endpoint - v1 snapshot events, writes money models
 
 The registries are deliberately not merged. v2 type strings look like
 `v2.core.account.closed` and v1 ones like `account.updated`; one namespace holding both

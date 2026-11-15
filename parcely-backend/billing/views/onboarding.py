@@ -4,7 +4,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from accounts.models import AppUser, CardPaymentsStatus
-from billing import connect
+from billing import connect_api
 from billing.webhooks import account_lifecycle
 
 
@@ -58,11 +58,11 @@ def start_onboarding(request):
         if user.stripe_account_id:
             account_id = user.stripe_account_id
         else:
-            account = connect.create_connected_account(user)
+            account = connect_api.create_connected_account(user)
             account_id = account.id
             # include= was passed on create, so the status is already here.
             user.stripe_account_id = account_id
-            user.card_payments_status = connect.merchant_status(account)
+            user.card_payments_status = connect_api.merchant_status(account)
             user.save(update_fields=[
                 "stripe_account_id", "card_payments_status", "updated_at",
             ])
@@ -75,7 +75,7 @@ def start_onboarding(request):
     #
     # Minting a link is not a mutation - it is Stripe's documented refresh
     # behaviour, so a double click is idempotent by construction.
-    url = connect.create_onboarding_link(account_id, use_case_type="account_onboarding")
+    url = connect_api.create_onboarding_link(account_id, use_case_type="account_onboarding")
 
     return Response({
         "url": url,

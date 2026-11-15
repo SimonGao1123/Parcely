@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from accounts.buyer_session import CHECKOUT_SCOPE, PURCHASES_SCOPE
 from accounts.models import AppUser
 
 class AppUserSerializer(serializers.ModelSerializer):
@@ -45,6 +46,11 @@ class PublicOwnerSerializer(serializers.ModelSerializer):
 class VerifyEmailSerializer(serializers.Serializer):
     email = serializers.EmailField()
     code = serializers.CharField()
+    # Which token the code is exchanged for. Defaulted so existing callers keep
+    # getting a checkout token without sending anything new.
+    purpose = serializers.ChoiceField(
+        choices=[CHECKOUT_SCOPE, PURCHASES_SCOPE], default=CHECKOUT_SCOPE
+    )
 
     def validate_email(self, value):
         # Must match the normalization in SendOTPEmailSerializer, since the row

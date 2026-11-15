@@ -4,11 +4,11 @@ v2 thin events, which carry no state at all - every handler that needs one refet
 account and copies Stripe's answer, which is what makes them order-independent.
 
 Writes AppUser.card_payments_status and nothing else. Money lives in the sibling
-fulfilment module.
+payment_events module.
 """
 
 from accounts.models import AppUser, CardPaymentsStatus
-from billing import connect
+from billing import connect_api
 
 CAPABILITY_STATUS_UPDATED = "v2.core.account[configuration.merchant].capability_status_updated"
 REQUIREMENTS_UPDATED = "v2.core.account[requirements].updated"
@@ -62,8 +62,8 @@ def refresh_card_payments_status(account_id: str) -> AppUser | None:
     remains (A fetches, B fetches, B writes, A writes stale); it self-heals on the
     next event, and closing it would cost a version column.
     """
-    account = connect.retrieve_account(account_id)
-    status = connect.merchant_status(account)
+    account = connect_api.retrieve_account(account_id)
+    status = connect_api.merchant_status(account)
 
     user = AppUser.objects.filter(stripe_account_id=account_id).first()
     if user is None:

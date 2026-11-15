@@ -15,7 +15,7 @@ from django.http import HttpResponse
 from svix.webhooks import Webhook, WebhookVerificationError
 from django.conf import settings
 from accounts.models import AppUser, Customer, EmailVerification, OTP_TTL
-from accounts.buyer_session import BUYER_SESSION_MAX_AGE, issue_buyer_token
+from accounts.buyer_session import BUYER_SESSION_MAX_AGE, CHECKOUT_SCOPE, issue_buyer_token
 from accounts.clerk import create_clerk_user, update_clerk_user, delete_clerk_user
 from cart.serializers import CartSerializer
 from cart.services import find_cart
@@ -138,6 +138,7 @@ class VerifyEmailAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data['email']
         code = serializer.validated_data['code']
+        purpose = serializer.validated_data['purpose']
 
         if request.user.is_authenticated and request.user.email.lower() != email:
             return Response({"error": "You are not authorized to verify this email address."}, status=status.HTTP_403_FORBIDDEN)
@@ -218,22 +219,26 @@ class VerifyEmailAPIView(APIView):
                 except IntegrityError:
                     customer.refresh_from_db()
 
-            # Inside the block because find_cart takes row locks, and with
-            # request.user rather than customer.user: a guest's cart is owned by
-            # its token, and handing find_cart a freshly linked user would claim
-            # that cart and null the token the browser is still holding.
-            cart = find_cart(
-                storefront,
-                request.user if request.user.is_authenticated else None,
-                request.headers.get("X-Public-Cart-ID"),
-            )
-            cart_data = CartSerializer(cart).data if cart else None
+            # Only checkout carries a cart forward; a purchases code is for
+            # reading history and has no business taking cart row locks.
+            cart_data = None
+            if purpose == CHECKOUT_SCOPE:
+                # Inside the block because find_cart takes row locks, and with
+                # request.user rather than customer.user: a guest's cart is owned by
+                # its token, and handing find_cart a freshly linked user would claim
+                # that cart and null the token the browser is still holding.
+                cart = find_cart(
+                    storefront,
+                    request.user if request.user.is_authenticated else None,
+                    request.headers.get("X-Public-Cart-ID"),
+                )
+                cart_data = CartSerializer(cart).data if cart else None
 
         # Minted after commit: a rolled back transaction must not hand out a
         # token naming a customer that was never written.
         return Response(
             {
-                "buyer_session": issue_buyer_token(customer),
+                "buyer_session": issue_buyer_token(customer, purpose),
                 "expires_in": BUYER_SESSION_MAX_AGE,
                 "cart": cart_data,
             },

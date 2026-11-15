@@ -12,7 +12,7 @@ Stripe from the view.
 
 from django.db.models import Q
 
-from billing.connect import _client
+from billing.connect_api import _client
 from products.models import Plan
 
 # Everything that decides the Stripe Price. Changing any of them cannot update the

@@ -62,6 +62,12 @@ class Customer(TimestampedModel):
     default_pm_last4 = models.CharField(max_length=4, null=True, blank=True) # will be null initially since create customer row
     # BEFORE stripe is called
 
+    # Set when the seller removes this buyer. Checkout refuses a blocked customer, but
+    # the row and its history stay - payments, orders and subscriptions PROTECT it, and
+    # clearing this is the whole of an unblock. Per seller, so it covers every storefront
+    # the seller owns.
+    blocked_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["seller", "email"], name="uniq_customer_seller_email"),

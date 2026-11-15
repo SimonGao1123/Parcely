@@ -42,7 +42,7 @@ out of scope — see §6.
 
 ## 2. Services — `products/stripe_catalog.py` (new)
 
-The only module that talks to Stripe about the catalog. Reuses `billing.connect._client`,
+The only module that talks to Stripe about the catalog. Reuses `billing.connect_api._client`,
 the single client in the process.
 
 **Deliberately not in `Plan.save()`.** Both `Product.save()` and `Plan.save()` call
@@ -239,7 +239,7 @@ payloads, which is what made those models designable against observed data inste
 guessed shapes.
 
 > **Superseded 2026-09-24.** The registry now holds nine handlers in
-> `billing/webhooks/fulfilment.py`, and the module layout moved —
+> `billing/webhooks/payment_events.py`, and the module layout moved —
 > `billing/handlers.py` → `billing/webhooks/account_lifecycle.py`,
 > `billing/views/stripeWebhooks.py` → `billing/webhooks/views.py`.
 > `STRIPE.md` §5 is authoritative for the current shape.
@@ -339,7 +339,7 @@ lands, turning the delete into a 409. **Done** — see `STRIPE.md` §6.
 Was: the Connect registry was empty by design, so a completed payment produced a
 `StripeEvent` row and **no `Order`**.
 
-Now: nine handlers in `billing/webhooks/fulfilment.py` write `Payment`, `Order` and
+Now: nine handlers in `billing/webhooks/payment_events.py` write `Payment`, `Order` and
 `Subscription`, clear the cart and release capacity reservations. See `STRIPE.md` §5.
 
 Still open underneath it: **nothing reads those rows back.** `billing/` has no

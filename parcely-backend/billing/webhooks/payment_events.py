@@ -21,11 +21,12 @@ import logging
 from datetime import datetime
 from datetime import timezone as dt_timezone
 
+import stripe
 from django.db import transaction
 from django.utils import timezone
 
 from accounts.models import Customer
-from billing.connect import _client
+from billing.connect_api import _client
 from billing.models import (
     ENDED_SUBSCRIPTION_STATUSES,
     LIVE_SUBSCRIPTION_STATUSES,
@@ -193,6 +194,46 @@ def _retrieve_subscription(subscription_id, account_id):
     )
 
 
+def mark_subscription_ended(stripe_sub) -> None:
+    """Copy a terminal Stripe subscription onto every row it owns.
+
+    Shared by the deleted webhook and the seller's remove-customer action, which writes
+    the result of its own cancel call immediately rather than waiting for that webhook.
+    Both write the same absolute values, so whichever lands second changes nothing.
+    """
+    ended = _ts(stripe_sub.ended_at or stripe_sub.canceled_at) or timezone.now()
+    Subscription.objects.filter(stripe_subscription_id=stripe_sub.id).update(
+        status=stripe_sub.status, ended_at=ended
+    )
+
+
+def _card_for(payment_intent_id, account_id):
+    """(brand, last4) of the card that paid, or (None, None).
+
+    Never raises. The card is display only, so a failed lookup is logged and the payment
+    written without it - failing fulfilment would retry a sale over a cosmetic field.
+    Called outside the transaction, like the line_items fetch, to keep the network out of
+    the locks.
+    """
+    if not payment_intent_id:
+        return None, None
+    try:
+        intent = _client.v1.payment_intents.retrieve(
+            payment_intent_id,
+            {"expand": ["latest_charge"]},
+            {"stripe_account": account_id},
+        )
+    except stripe.StripeError:
+        logger.warning("Could not read the card for %s", payment_intent_id)
+        return None, None
+    charge = getattr(intent, "latest_charge", None)
+    details = getattr(charge, "payment_method_details", None) if charge else None
+    card = getattr(details, "card", None) if details else None
+    if card is None:
+        return None, None
+    return getattr(card, "brand", None), getattr(card, "last4", None)
+
+
 # --------------------------------------------------------------------------- orders
 
 
@@ -230,6 +271,7 @@ def _fulfil_cart_session(session, account_id):
     lines = _client.v1.checkout.sessions.line_items.list(
         session.id, {"limit": 100}, {"stripe_account": account_id}
     )
+    card_brand, card_last4 = _card_for(session.payment_intent, account_id)
 
     with transaction.atomic():
         payment, created = Payment.objects.get_or_create(
@@ -241,6 +283,8 @@ def _fulfil_cart_session(session, account_id):
                 # Free, and the only handle a refund will have - charge.refunded names
                 # the payment intent, never the session.
                 "stripe_payment_intent_id": session.payment_intent,
+                "card_brand": card_brand,
+                "card_last4": card_last4,
             },
         )
         if not created:
@@ -391,6 +435,9 @@ def handle_invoice_paid(event_obj, event) -> None:
             for synced in _sync_subscription(stripe_sub, account_id, customer):
                 by_item[synced.stripe_subscription_item_id] = synced
 
+    payment_intent_id = _invoice_payment_intent(invoice)
+    card_brand, card_last4 = _card_for(payment_intent_id, account_id)
+
     with transaction.atomic():
         payment, created = Payment.objects.get_or_create(
             stripe_invoice_id=invoice.id,
@@ -398,7 +445,9 @@ def handle_invoice_paid(event_obj, event) -> None:
                 "customer": customer,
                 "amount_cents": invoice.amount_paid or 0,
                 "currency": invoice.currency,
-                "stripe_payment_intent_id": _invoice_payment_intent(invoice),
+                "stripe_payment_intent_id": payment_intent_id,
+                "card_brand": card_brand,
+                "card_last4": card_last4,
             },
         )
         if not created:
@@ -489,11 +538,7 @@ def _handle_subscription_event(event_obj, event) -> None:
 def handle_subscription_deleted(event_obj, event) -> None:
     """Terminal. The rows stay - Order.subscription is PROTECT, and deleting them would
     take the buyer's receipts with them."""
-    stripe_sub = event_obj
-    ended = _ts(stripe_sub.ended_at or stripe_sub.canceled_at) or timezone.now()
-    Subscription.objects.filter(stripe_subscription_id=stripe_sub.id).update(
-        status=stripe_sub.status, ended_at=ended
-    )
+    mark_subscription_ended(event_obj)
 
 
 def _on_object(handler):

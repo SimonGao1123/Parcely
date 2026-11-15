@@ -18,7 +18,7 @@ import hashlib
 
 from django.conf import settings
 
-from billing.connect import _client
+from billing.connect_api import _client
 
 
 def _account_id(storefront) -> str:
@@ -135,6 +135,11 @@ def create_subscription_session(*, customer, plan, storefront, reservation):
         storefront=storefront,
         params={
             "mode": "subscription",
+            # Back to the plan's own subscribe page, not the cart it never passed through.
+            # The reservation is deliberately left standing: claim() hands the same live
+            # one back, so the same idempotency key replays this same open session and
+            # Continue resumes it.
+            "cancel_url": f"{settings.FRONTEND_URL}/{storefront.slug}/subscribe/{plan.id}",
             # Quantity is always 1 - a buyer may hold only one live subscription per
             # product, so two of the same seat is not something that can be sold.
             "line_items": [{"price": plan.stripe_price_id, "quantity": 1}],

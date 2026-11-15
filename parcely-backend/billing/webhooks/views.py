@@ -8,9 +8,9 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from billing.connect import _client
+from billing.connect_api import _client
 from billing.models import StripeEvent
-from billing.webhooks import account_lifecycle, fulfilment
+from billing.webhooks import account_lifecycle, payment_events
 
 
 def _record_and_dispatch(raw_body, *, event_id, event_type, account_id, parsed, handler):
@@ -111,7 +111,7 @@ def stripe_connect_webhook(request):
     hence construct_event, and hence a separate handler registry keyed on v1 type
     strings so that `account.updated` can never be confused with `v2.core.account.*`.
 
-    Fulfilment lives in the sibling fulfilment module, which this dispatches into.
+    Fulfilment lives in the sibling payment_events module, which this dispatches into.
     """
     try:
         event = _client.construct_event(
@@ -132,5 +132,5 @@ def stripe_connect_webhook(request):
         # None when Stripe delivers a platform event to this endpoint.
         account_id=event.account,
         parsed=event,
-        handler=fulfilment.handler_for(event.type),
+        handler=payment_events.handler_for(event.type),
     )

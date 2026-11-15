@@ -170,7 +170,7 @@ One-time payments skip the top two entirely; Stripe creates no invoice for a
 `mode: "payment"` session. And **a trialing subscription's first invoice is $0,
 marked `paid`, and has no PaymentIntent at all** — a handler that assumes
 `invoice.payments` is populated crashes on every trial signup.
-`_invoice_payment_intent()` in `billing/webhooks/fulfilment.py` returns `None`
+`_invoice_payment_intent()` in `billing/webhooks/payment_events.py` returns `None`
 there by design.
 
 Three structural facts that drive the rest of this document:
@@ -489,7 +489,7 @@ because one endpoint cannot serve many connected accounts. It can.
 billing/webhooks/
     views.py               both endpoints — verify, record, dispatch
     account_lifecycle.py   platform registry (5) — writes AppUser
-    fulfilment.py          connect registry  (9) — writes the money graph
+    payment_events.py       connect registry  (9) — writes the money graph
 ```
 
 ```

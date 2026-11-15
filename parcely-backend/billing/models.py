@@ -61,6 +61,12 @@ class Payment(TimestampedModel):
     stripe_payment_intent_id = models.CharField(max_length=255, null=True, blank=True)
     stripe_invoice_id = models.CharField(max_length=255, null=True, blank=True)
 
+    # Display only, copied from the charge when the webhook writes the row. Null on a $0
+    # trial invoice, which has no charge, and whenever that lookup failed - it never
+    # holds up fulfilment.
+    card_brand = models.CharField(max_length=32, null=True, blank=True)
+    card_last4 = models.CharField(max_length=4, null=True, blank=True)
+
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
@@ -129,10 +135,11 @@ ENDED_SUBSCRIPTION_STATUSES = [
 class Subscription(TimestampedModel):
     """One plan a customer is subscribed to.
 
-    Maps to a Stripe *SubscriptionItem*, not a Subscription. A Checkout Session creates
-    at most one sub_, so a cart holding three recurring plans comes back as one sub_ with
-    three items. Keying on si_ is what keeps one row per plan, so cancelling a single plan
-    removes one item rather than tearing down the others.
+    Maps to a Stripe *SubscriptionItem*, not a Subscription. Subscription checkout sends
+    exactly one line, so every sub_ we create has exactly one si_ and the two are 1:1 in
+    practice. The row is still keyed on si_ because a sub_ can hold several items - a seller
+    can edit one on their own connected account - and keying on it keeps one row per plan,
+    so cancelling a single plan removes one item rather than tearing down the others.
     """
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="subscriptions")
 
