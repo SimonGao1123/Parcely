@@ -48,6 +48,15 @@ class _BuyerCheckoutAPIView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Matched on the link as well as the address: the seller's Customer row can be
+        # linked to their account under an email they have since changed at Clerk.
+        owner = storefront.owner
+        if customer.user_id == owner.id or customer.email.lower() == (owner.email or "").lower():
+            return storefront, None, Response(
+                {"detail": "You can't purchase from your own store."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if not storefront.owner.can_sell:
             return storefront, None, Response(
                 {"detail": "This store cannot accept payments yet."},
